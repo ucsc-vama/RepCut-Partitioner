@@ -1,0 +1,8 @@
+/Applications/CLion.app/Contents/bin/cmake/mac/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_DEPENDS_USE_COMPILER=FALSE -G "CodeBlocks - Unix Makefiles" /Users/hwang/project/repcut-v2/RCP
+-- Found Boost: /opt/homebrew/lib/cmake/Boost-1.80.0/BoostConfig.cmake (found suitable version "1.80.0", minimum required is "1.69") found components: program_options log_setup log 
+-- Boost Include: /opt/homebrew/include
+-- Boost Library Dirs: /opt/homebrew/lib
+-- Boost Libraries: Boost::program_options;Boost::log_setup;Boost::log
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /Users/hwang/project/repcut-v2/RCP/cmake-build-debug
