@@ -20,7 +20,7 @@ bool parse_commandline_options(int argc, char** argv) {
 
     if (vm.count("help")) {
         std::cout << desc << "\n";
-        return 1;
+        return false;
     }
 
     if (vm.count("nparts")) {

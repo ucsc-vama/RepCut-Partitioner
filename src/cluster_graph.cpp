@@ -1,0 +1,296 @@
+//
+// Created by Haoyuan Wang on 11/8/22.
+//
+
+#include "rcp_common.h"
+
+#include <chrono>
+
+
+#include "cluster_graph.h"
+#include <iostream>
+
+
+// Recursively collect cones
+void ClusterGraph::_collect_cone_worker(const DirectedAcyclicGraph* dag, std::unordered_map<uint32_t, std::unordered_set<uint32_t>>& cache, uint32_t seed) {
+    if (!cache.contains(seed)) {
+        //
+        std::unordered_set<uint32_t> dep_nodes;
+        dep_nodes.insert(seed);
+        for (auto& nid: dag->inNeigh[seed]) {
+            if (dag->nodeValid[nid]) {
+                // for all valid nodes
+                _collect_cone_worker(dag, cache, nid);
+                dep_nodes.insert(cache[nid].begin(), cache[nid].end());
+            }
+        }
+        cache[seed] = std::move(dep_nodes);
+    }
+}
+
+// Recursively collect cluster
+void ClusterGraph::_collect_cluster_worker(const DirectedAcyclicGraph *dag, uint32_t cluster_id, uint32_t seed) {
+    if (cluster_id >= INT32_MAX) {
+        BOOST_LOG_TRIVIAL(fatal) << "Cluster id too large";
+        exit(-1);
+    }
+
+    // This condition may be removed
+    if (this->idToClusterId[seed] == -1) {
+        // unvisited
+        this->clusters[cluster_id].push_back(seed);
+        this->idToClusterId[seed] = static_cast<int32_t>(cluster_id);
+
+        std::vector<uint32_t> connected_vtxs;
+        for (auto& vtx: dag->inNeigh[seed]) {
+            if (this->idToClusterId[vtx] == -1) {
+                connected_vtxs.push_back(vtx);
+            }
+        }
+        for (auto& vtx: dag->outNeigh[seed]) {
+            if (this->idToClusterId[vtx] == -1) {
+                connected_vtxs.push_back(vtx);
+            }
+        }
+
+        for (auto& vtx: connected_vtxs) {
+            if (this->idToConeId[vtx] == this->idToConeId[seed]) {
+                // Same cluster
+                _collect_cluster_worker(dag, cluster_id, seed);
+            }
+        }
+    }
+}
+
+
+
+void ClusterGraph::_collect_cones(const DirectedAcyclicGraph *dag) {
+    BOOST_LOG_TRIVIAL(trace) << "Collect cones: Start";
+    auto start = std::chrono::system_clock::now();
+
+    std::unordered_map<uint32_t, std::unordered_set<uint32_t>> cone_cache;
+    for (auto& cone_seed: dag->sinkNodes) {
+        _collect_cone_worker(dag, cone_cache, cone_seed);
+    }
+
+    for (auto& cone_seed: dag->sinkNodes) {
+        this->cones_original_nodes.push_back(cone_cache[cone_seed]);
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(trace) << "Collect cones: Done in " << time_ms << "ms";
+}
+
+
+void ClusterGraph::_collect_clusters(const DirectedAcyclicGraph *dag) {
+    BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Start";
+    auto start = std::chrono::system_clock::now();
+
+    // mark cone id
+    // this->idToConeId.insert(this->idToConeId.end(), dag->numNodes, std::set<uint32_t>());
+    this->idToConeId.assign(dag->numNodes, std::set<uint32_t>());
+
+    for (uint32_t cid = 0; cid < this->cones_original_nodes.size(); cid++) {
+        for (auto& nid: this->cones_original_nodes[cid]) {
+            this->idToConeId[nid].insert(cid);
+        }
+    }
+
+    // init this->idToClusterId
+    // -1: unvisited
+    // -2 invalid
+    this->idToClusterId.assign(dag->numNodes, -1);
+
+    for (uint32_t nid = 0; nid < dag-> numNodes; nid++) {
+        if (!(dag->nodeValid[nid])) {
+            this->idToClusterId[nid] = -2;
+        }
+    }
+
+    // First, collect all clusters for all sink nodes
+    for (auto& sink_vtx: dag->sinkNodes) {
+        // starts from 0
+        uint32_t cluster_id = this->clusters.size();
+        this->clusters.emplace_back(std::vector<uint32_t>());
+        assert(cluster_id + 1 == this->clusters.size());
+        this->_collect_cluster_worker(dag, cluster_id, sink_vtx);
+    }
+
+    // Collect clusters for all remaining nodes
+    assert(this->idToClusterId.size() == dag->numNodes);
+    uint32_t cluster_seed = 0;
+    while (true) {
+        while ((this->idToClusterId[cluster_seed] != -1) && (cluster_seed < dag->numNodes)) {
+            cluster_seed ++;
+        }
+
+        if (cluster_seed >= dag->numNodes) {
+            break;
+        }
+
+        uint32_t cluster_id = this->clusters.size();
+        this->clusters.emplace_back(std::vector<uint32_t>());
+        this->_collect_cluster_worker(dag, cluster_id, cluster_seed);
+    }
+
+
+    // It's guaranteed first nodes are sink nodes.
+    for (uint32_t sink_cluster_id = 0; sink_cluster_id < dag->sinkNodes.size(); sink_cluster_id++) {
+        this->sinkNodes.push_back(sink_cluster_id);
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Done in " << time_ms << "ms";
+}
+
+void ClusterGraph::_build_cluster_graph(const DirectedAcyclicGraph *dag) {
+    BOOST_LOG_TRIVIAL(trace) << "Build cluster graph: Start";
+    auto start = std::chrono::system_clock::now();
+
+    // numEdge: Cannot determine yet
+    this->numEdges = 0;
+    this->numNodes = this->clusters.size();
+    this->inNeigh.assign(this->numNodes, std::vector<uint32_t>());
+    this->outNeigh.assign(this->numNodes, std::vector<uint32_t>());
+    this->weight.assign(this->numNodes, 0);
+
+    for (uint32_t cluster_id = 0; cluster_id < this->clusters.size(); cluster_id++) {
+        //
+        std::set<uint32_t> cluster_outNeighs;
+
+        for (auto &nid: this->clusters[cluster_id]) {
+            // save all outNeighs
+            cluster_outNeighs.insert(dag->outNeigh[nid].begin(), dag->outNeigh[nid].end());
+        }
+
+        for (auto &nid: this->clusters[cluster_id]) {
+            // remove all inNeighs
+            for (auto &inNeigh_id: dag->inNeigh[nid]) {
+                if (cluster_outNeighs.contains(inNeigh_id)) {
+                    cluster_outNeighs.erase(inNeigh_id);
+                }
+            }
+        }
+
+        // Assert: if this cluster is confirmed to be a sink cluster,
+        // it must exists in this->sinkNodes
+        if (cluster_outNeighs.empty()) {
+            assert(std::find(this->sinkNodes.begin(), this->sinkNodes.end(), cluster_id) != this->sinkNodes.end());
+        } else {
+            // Has descendent(s)
+            std::set<uint32_t> descendent_clusters;
+            for (auto &outNeigh_id: cluster_outNeighs) {
+                int32_t outNeigh_cluster_id = this->idToClusterId[outNeigh_id];
+                // cluster_id == -1 => unvisited
+                // Shouldn't happen here
+                assert(outNeigh_cluster_id != -1);
+                // cluster_id == -2 => invalid
+                if (outNeigh_cluster_id >= 0) {
+                    descendent_clusters.insert(static_cast<uint32_t>(outNeigh_cluster_id));
+                }
+            }
+            // build outNeigh
+            this->outNeigh[cluster_id].assign(descendent_clusters.begin(), descendent_clusters.end());
+        }
+
+        // Last step: Build inNeight from outNeigh
+        for (auto &dst_cid: this->outNeigh[cluster_id]) {
+            this->inNeigh[dst_cid].push_back(cluster_id);
+            this->numEdges ++;
+        }
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(trace) << "Build cluster graph: Done in " << time_ms << "ms";
+}
+
+
+void ClusterGraph::_update_cluster_weight(const DirectedAcyclicGraph* dag) {
+    BOOST_LOG_TRIVIAL(trace) << "Update cluster weight: Start";
+    auto start = std::chrono::system_clock::now();
+
+    for (int cluster_id = 0; cluster_id < this->numNodes; cluster_id++) {
+        // Weight starts at 1 to make KaHyPar happy
+        uint32_t cluster_weight = 1;
+        // Stop/Print has a weight of 1/7
+        uint32_t stmt_stop_cnt = 0;
+        uint32_t stmt_print_cnt = 0;
+
+        for (auto& stmt_id: this->clusters[cluster_id]) {
+            if (dag->nodeValid[stmt_id]) {
+                cluster_weight += dag->weight[stmt_id];
+                if (dag->node_stmts[stmt_id].find("Print") == 0) {
+                    // A print
+                    stmt_print_cnt ++;
+                } else if (dag->node_stmts[stmt_id].find("Stop") == 0) {
+                    stmt_stop_cnt ++;
+                }
+            }
+        }
+
+        this->weight[cluster_id] = cluster_weight + (stmt_stop_cnt + stmt_print_cnt) / 7;
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(trace) << "Update cluster weight: Done in " << time_ms << "ms";
+}
+
+void ClusterGraph::_update_cluster_cone(const DirectedAcyclicGraph *dag) {
+    BOOST_LOG_TRIVIAL(trace) << "Update cluster cones: Start";
+    auto start = std::chrono::system_clock::now();
+
+    assert(!this->cones_original_nodes.empty());
+    assert(this->cones_cg_nodes.empty());
+
+    for (auto& cone: this->cones_original_nodes) {
+        std::unordered_set<uint32_t> cone_clusters;
+        for (auto& nid: cone) {
+            assert(dag->nodeValid[nid]);
+            auto node_cluster_id = this->idToClusterId[nid];
+            assert(node_cluster_id >= 0);
+            cone_clusters.insert(node_cluster_id);
+        }
+        this->cones_cg_nodes.push_back(std::move(cone_clusters));
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(trace) << "Update cluster cones: Done in " << time_ms << "ms";
+}
+
+
+void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph *dag) {
+    BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Start";
+    auto start = std::chrono::system_clock::now();
+    // 1. find sink vtxs
+    // Already done in dag
+
+    // 2. collect cones
+    this->_collect_cones(dag);
+
+    // 3. collect clusters
+    this->_collect_clusters(dag);
+
+    // 4. build cluster graph
+    this->_build_cluster_graph(dag);
+
+    // 5. computer cluster weight
+    this->_update_cluster_weight(dag);
+
+    // 6. calculate cones in cluster graph
+    this->_update_cluster_cone(dag);
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Done in " << time_ms << "ms";
+}

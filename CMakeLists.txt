@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 
 project(rcp)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 include_directories(src)
@@ -21,6 +21,8 @@ message(STATUS "Boost Libraries: ${Boost_LIBRARIES}")
 add_executable(rcp
         src/main.cpp
         src/commandline_options.cpp
+        src/dag.cpp
+        src/cluster_graph.cpp
         )
-
+target_precompile_headers(rcp PUBLIC include/rcp_common.h)
 target_link_libraries(rcp ${Boost_LIBRARIES})

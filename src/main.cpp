@@ -1,10 +1,11 @@
 #include <iostream>
 
 #include "commandline_options.h"
-#include <boost/log/core.hpp>
-#include <boost/log/trivial.hpp>
-#include <boost/log/expressions.hpp>
+#include "dag.h"
+#include "cluster_graph.h"
+
 #include <boost/log/utility/setup/console.hpp>
+
 
 int main(int argc, char** argv) {
     boost::log::add_console_log(std::cout, boost::log::keywords::format = ">> %Message%");
@@ -16,6 +17,24 @@ int main(int argc, char** argv) {
         // Some commandline options are illegal
         exit(-1);
     }
-    std::cout << "Hello" << std::endl;
+
+    BOOST_LOG_TRIVIAL(info) << "Read file";
+
+    auto* input_dag = new DirectedAcyclicGraph();
+    input_dag->buildFromFile(opts.graph_filename.c_str());
+    bool correct = input_dag->checkCorrectness();
+    if (!correct) {
+        exit(-1);
+    }
+
+    // Find all sink Vtxs
+    input_dag->findSinkNodes();
+
+    BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
+    auto* cluster_graph = new ClusterGraph();
+    cluster_graph->collapseFromDAG(input_dag);
+
+    std::cout << "Done" << std::endl;
+
     return 0;
 }
