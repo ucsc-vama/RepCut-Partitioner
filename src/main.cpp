@@ -3,6 +3,7 @@
 #include "commandline_options.h"
 #include "dag.h"
 #include "cluster_graph.h"
+#include "hyper_graph.h"
 
 #include <boost/log/utility/setup/console.hpp>
 
@@ -33,6 +34,11 @@ int main(int argc, char** argv) {
     BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
     auto* cluster_graph = new ClusterGraph();
     cluster_graph->collapseFromDAG(input_dag);
+
+
+    BOOST_LOG_TRIVIAL(info) << "Build hyper graph";
+    auto* hyper_graph = new HyperGraph();
+    hyper_graph->buildFromClusterGraph(cluster_graph);
 
     std::cout << "Done" << std::endl;
 

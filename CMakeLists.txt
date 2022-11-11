@@ -23,6 +23,7 @@ add_executable(rcp
         src/commandline_options.cpp
         src/dag.cpp
         src/cluster_graph.cpp
+        src/hyper_graph.cpp
         )
 target_precompile_headers(rcp PUBLIC include/rcp_common.h)
 target_link_libraries(rcp ${Boost_LIBRARIES})
