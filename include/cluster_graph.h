@@ -12,7 +12,7 @@
 
 class ClusterGraph : public DirectedAcyclicGraph {
 private:
-    void _collect_cone_worker(const DirectedAcyclicGraph* dag, std::unordered_map<uint32_t, std::unordered_set<uint32_t>>& cache, uint32_t seed);
+    void _collect_cone_worker(const DirectedAcyclicGraph* dag, std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed);
     void _collect_cluster_worker(const DirectedAcyclicGraph* dag, uint32_t cluster_id, uint32_t seed);
 
     void _collect_cones(const DirectedAcyclicGraph* dag);
@@ -24,9 +24,9 @@ private:
     void _update_cluster_cone(const DirectedAcyclicGraph* dag);
 public:
     // Cone nodes in Stmt DAG
-    std::vector<std::unordered_set<uint32_t>> cones_original_nodes;
+    std::vector<std::vector<uint32_t>> cones_original_nodes;
     // Cone nodes in Cluster Graph
-    std::vector<std::unordered_set<uint32_t>> cones_cg_nodes;
+    std::vector<std::vector<uint32_t>> cones_cg_nodes;
     // Clusters should be non-overlapping
     std::vector<std::vector<uint32_t>> clusters;
 

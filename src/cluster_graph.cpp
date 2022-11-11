@@ -12,7 +12,7 @@
 
 
 // Recursively collect cones
-void ClusterGraph::_collect_cone_worker(const DirectedAcyclicGraph* dag, std::unordered_map<uint32_t, std::unordered_set<uint32_t>>& cache, uint32_t seed) {
+void ClusterGraph::_collect_cone_worker(const DirectedAcyclicGraph* dag, std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed) {
     if (!cache.contains(seed)) {
         //
         std::unordered_set<uint32_t> dep_nodes;
@@ -24,7 +24,9 @@ void ClusterGraph::_collect_cone_worker(const DirectedAcyclicGraph* dag, std::un
                 dep_nodes.insert(cache[nid].begin(), cache[nid].end());
             }
         }
-        cache[seed] = std::move(dep_nodes);
+        std::vector<uint32_t> dep_nodes_vec;
+        dep_nodes_vec.assign(dep_nodes.begin(), dep_nodes.end());
+        cache[seed] = std::move(dep_nodes_vec);
     }
 }
 
@@ -68,7 +70,7 @@ void ClusterGraph::_collect_cones(const DirectedAcyclicGraph *dag) {
     BOOST_LOG_TRIVIAL(trace) << "Collect cones: Start";
     auto start = std::chrono::system_clock::now();
 
-    std::unordered_map<uint32_t, std::unordered_set<uint32_t>> cone_cache;
+    std::unordered_map<uint32_t, std::vector<uint32_t>> cone_cache;
     for (auto& cone_seed: dag->sinkNodes) {
         _collect_cone_worker(dag, cone_cache, cone_seed);
     }
@@ -258,7 +260,9 @@ void ClusterGraph::_update_cluster_cone(const DirectedAcyclicGraph *dag) {
             assert(node_cluster_id >= 0);
             cone_clusters.insert(node_cluster_id);
         }
-        this->cones_cg_nodes.push_back(std::move(cone_clusters));
+        std::vector<uint32_t> cone_clusters_vec;
+        cone_clusters_vec.assign(cone_clusters.begin(), cone_clusters.end());
+        this->cones_cg_nodes.push_back(std::move(cone_clusters_vec));
     }
 
     auto stop = std::chrono::system_clock::now();
