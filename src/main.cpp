@@ -24,9 +24,7 @@ int main(int argc, char** argv) {
     auto* input_dag = new DirectedAcyclicGraph();
     input_dag->buildFromFile(opts.graph_filename.c_str());
     bool correct = input_dag->checkCorrectness();
-    if (!correct) {
-        exit(-1);
-    }
+    if (!correct) exit(-1);
 
     // Find all sink Vtxs
     input_dag->findSinkNodes();
@@ -39,6 +37,13 @@ int main(int argc, char** argv) {
     BOOST_LOG_TRIVIAL(info) << "Build hyper graph";
     auto* hyper_graph = new HyperGraph();
     hyper_graph->buildFromClusterGraph(cluster_graph);
+
+    fs::path hmetis_filename = "hyper_graph.hmetis";
+    auto hmetis_fullpath = opts.work_directory / hmetis_filename;
+    hyper_graph ->writeTohMetisFile(hmetis_fullpath.c_str());
+
+
+
 
     std::cout << "Done" << std::endl;
 

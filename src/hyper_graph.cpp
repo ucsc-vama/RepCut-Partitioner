@@ -84,6 +84,9 @@ void HyperGraph::buildFromClusterGraph(const ClusterGraph *cg) {
 }
 
 void HyperGraph::writeTohMetisFile(const char* filename) {
+    BOOST_LOG_TRIVIAL(trace) << "Write to hMetis: Start";
+    auto start = std::chrono::system_clock::now();
+
     std::ofstream ofs(filename);
 
     // write header
@@ -107,4 +110,9 @@ void HyperGraph::writeTohMetisFile(const char* filename) {
 
     // Done
     ofs.close();
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    uint64_t time_ms = duration.count();
+    BOOST_LOG_TRIVIAL(trace) << "Write to hMetis: Done in " << time_ms << "ms";
 }
