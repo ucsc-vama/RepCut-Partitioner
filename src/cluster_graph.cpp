@@ -32,12 +32,7 @@ void ClusterGraph::_collect_cone_worker(const DirectedAcyclicGraph* dag, std::un
 
 // Recursively collect cluster
 void ClusterGraph::_collect_cluster_worker(const DirectedAcyclicGraph *dag, uint32_t cluster_id, uint32_t seed) {
-    if (cluster_id >= INT32_MAX) {
-        BOOST_LOG_TRIVIAL(fatal) << "Cluster id too large";
-        exit(-1);
-    }
 
-    // This condition may be removed
     if (this->idToClusterId[seed] == -1) {
         // unvisited
         this->clusters[cluster_id].push_back(seed);
@@ -58,7 +53,7 @@ void ClusterGraph::_collect_cluster_worker(const DirectedAcyclicGraph *dag, uint
         for (auto& vtx: connected_vtxs) {
             if (this->idToConeId[vtx] == this->idToConeId[seed]) {
                 // Same cluster
-                _collect_cluster_worker(dag, cluster_id, seed);
+                _collect_cluster_worker(dag, cluster_id, vtx);
             }
         }
     }
@@ -115,6 +110,10 @@ void ClusterGraph::_collect_clusters(const DirectedAcyclicGraph *dag) {
     for (auto& sink_vtx: dag->sinkNodes) {
         // starts from 0
         uint32_t cluster_id = this->clusters.size();
+        if (cluster_id >= INT32_MAX) {
+            BOOST_LOG_TRIVIAL(fatal) << "Cluster id too large";
+            exit(-1);
+        }
         this->clusters.emplace_back(std::vector<uint32_t>());
         assert(cluster_id + 1 == this->clusters.size());
         this->_collect_cluster_worker(dag, cluster_id, sink_vtx);
@@ -133,6 +132,10 @@ void ClusterGraph::_collect_clusters(const DirectedAcyclicGraph *dag) {
         }
 
         uint32_t cluster_id = this->clusters.size();
+        if (cluster_id >= INT32_MAX) {
+            BOOST_LOG_TRIVIAL(fatal) << "Cluster id too large";
+            exit(-1);
+        }
         this->clusters.emplace_back(std::vector<uint32_t>());
         this->_collect_cluster_worker(dag, cluster_id, cluster_seed);
     }

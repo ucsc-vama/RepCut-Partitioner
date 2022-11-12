@@ -98,8 +98,8 @@ void HyperGraph::writeTohMetisFile(const char* filename) {
         uint32_t edge_weight = this -> edgeWeight[edge_id];
         tokens.push_back(std::to_string(edge_weight));
         // Note: node id + 1 to make KaHyPar happy
-        std::transform(this -> edges[edge_id].begin(), this -> edges[edge_id].end(), tokens.end(),
-                       [] (uint32_t nid) {return std::to_string(nid + 1);});
+        std::for_each(this -> edges[edge_id].begin(), this -> edges[edge_id].end(),
+                      [&] (uint32_t nid) {tokens.push_back(std::to_string(nid + 1));});
         std::string line = boost::algorithm::join(tokens, " ");
         ofs << line << "\n";
     }
