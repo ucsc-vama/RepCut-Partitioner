@@ -1,12 +1,11 @@
 #pragma once
 
-#include <string>
-#include <filesystem>
+#include "rcp_common.h"
 
 #include <boost/log/trivial.hpp>
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
-namespace fs = std::filesystem;
+
 
 class CommandlineOptions {
 public:

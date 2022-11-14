@@ -4,6 +4,7 @@
 #include "dag.h"
 #include "cluster_graph.h"
 #include "hyper_graph.h"
+#include "rep_cut_partitioner.h"
 
 #include <boost/log/utility/setup/console.hpp>
 
@@ -38,10 +39,10 @@ int main(int argc, char** argv) {
     auto* hyper_graph = new HyperGraph();
     hyper_graph->buildFromClusterGraph(cluster_graph);
 
-    fs::path hmetis_filename = "hyper_graph.hmetis";
-    auto hmetis_fullpath = opts.work_directory / hmetis_filename;
-    hyper_graph ->writeTohMetisFile(hmetis_fullpath.c_str());
-
+    BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
+    auto* rcp = new RepCutPartitioner();
+    rcp -> hg = hyper_graph;
+    rcp -> partition();
 
 
 

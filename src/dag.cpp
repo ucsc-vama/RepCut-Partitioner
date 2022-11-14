@@ -18,9 +18,6 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
     std::string line;
     uint32_t lineno = 0;
 
-    char* cursor = NULL;
-    const char* file_sep = " ";
-
     std::vector<int32_t> nums;
     std::vector<std::string> split_line;
 
