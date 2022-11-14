@@ -24,6 +24,6 @@ add_executable(rcp
         src/dag.cpp
         src/cluster_graph.cpp
         src/hyper_graph.cpp
-        src/rep_cut_partitioner.cpp)
+        src/rep_cut_partitioner.cpp src/SBitSet.cpp)
 target_precompile_headers(rcp PUBLIC include/rcp_common.h)
 target_link_libraries(rcp ${Boost_LIBRARIES})
