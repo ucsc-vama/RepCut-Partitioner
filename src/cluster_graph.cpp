@@ -325,7 +325,7 @@ void ClusterGraph::reportPartitionStatus() {
 
     uint32_t sg_size = this -> idToClusterId.size();
     uint32_t sg_valid_size = std::count_if(dag->nodeValid.begin(), dag->nodeValid.end(), [](bool in) {return in;});
-    uint32_t sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), 0);
+    uint32_t sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), static_cast<uint32_t>(0));
 
     uint32_t total_part_size = 0;
     uint32_t total_part_weight = 0;
