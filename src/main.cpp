@@ -44,6 +44,12 @@ int main(int argc, char** argv) {
     rcp -> hg = hyper_graph;
     rcp -> partition();
 
+    BOOST_LOG_TRIVIAL(info) << "Construct partition from RCP result";
+    cluster_graph -> constructParts(rcp -> coneIdToPartId);
+
+
+    cluster_graph -> reportPartitionStatus();
+
 
 
     std::cout << "Done" << std::endl;

@@ -37,12 +37,13 @@ public:
 
         uint32_t dat_pos_old = this -> max_elem / 64;
 
-        if (dat_pos_new > dat_pos_old) {
-            this -> dat.insert(this -> dat.end(), (dat_pos_new - dat_pos_old), 0);
+        if (dat_pos_new >= dat.size()) {
+            uint32_t space_to_grow = dat_pos_new + 1 - dat.size();
+            this -> dat.insert(this -> dat.end(), space_to_grow, 0);
         }
 
         uint64_t old_data = this -> dat[dat_pos_new];
-        uint64_t new_data = old_data & (0x1l << bit_pos_new);
+        uint64_t new_data = old_data | (0x1l << bit_pos_new);
         this -> dat[dat_pos_new] = new_data;
 
         this -> max_elem = std::max(elem, this -> max_elem);

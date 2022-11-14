@@ -10,18 +10,20 @@
 #include "dag.h"
 #include "SBitSet.h"
 
+#include <boost/dynamic_bitset.hpp>
+
 class ClusterGraph : public DirectedAcyclicGraph {
 private:
-    void _collect_cone_worker(const DirectedAcyclicGraph* dag, std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed);
-    void _collect_cluster_worker(const DirectedAcyclicGraph* dag, uint32_t cluster_id, uint32_t seed);
+    void _collect_cone_worker(std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed);
+    void _collect_cluster_worker(uint32_t cluster_id, uint32_t seed);
 
-    void _collect_cones(const DirectedAcyclicGraph* dag);
-    void _collect_clusters(const DirectedAcyclicGraph* dag);
+    void _collect_cones();
+    void _collect_clusters();
 
-    void _build_cluster_graph(const DirectedAcyclicGraph* dag);
-    void _update_cluster_weight(const DirectedAcyclicGraph* dag);
+    void _build_cluster_graph();
+    void _update_cluster_weight();
 
-    void _update_cluster_cone(const DirectedAcyclicGraph* dag);
+    void _update_cluster_cone();
 public:
     // Cone nodes in Stmt DAG
     std::vector<std::vector<uint32_t>> cones_original_nodes;
@@ -35,7 +37,18 @@ public:
     std::vector<int32_t> idToClusterId;
     std::vector<std::set<uint32_t>> idToConeId;
 
+    std::vector<SBitSet> partitions;
+
+    const DirectedAcyclicGraph* dag = nullptr;
+
+    // Cluster weight:
+    // std::vector<uint32_t> weight;
+
     void collapseFromDAG(const DirectedAcyclicGraph* dag);
+
+    void constructParts(const std::vector<uint32_t>& coneIdToPartId);
+
+    void reportPartitionStatus();
 };
 
 #endif //RCP_COLLAPSE_GRAPH_H
