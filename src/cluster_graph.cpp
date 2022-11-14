@@ -231,6 +231,7 @@ void ClusterGraph::_update_cluster_weight() {
 
         for (auto& stmt_id: this->clusters[cluster_id]) {
             if (dag->nodeValid[stmt_id]) {
+                // For every valid nodes, weight must >= 0
                 assert(dag->weight[stmt_id] >= 0);
                 cluster_weight += dag->weight[stmt_id];
                 if (dag->node_stmts[stmt_id].find("Print") == 0) {
