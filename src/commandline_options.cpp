@@ -3,6 +3,8 @@
 #include <iostream>
 
 CommandlineOptions opts;
+std::unordered_map<std::string, boost::log::trivial::severity_level> log_levels;
+const char* supported_log_levels = "fatal, error, warning, info, debug, trace";
 
 bool parse_commandline_options(int argc, char** argv) {
     // Declare the supported options.
@@ -12,7 +14,7 @@ bool parse_commandline_options(int argc, char** argv) {
             ("nparts", po::value<int>(), "set compression level")
             ("graph_file", po::value<std::string>(), "input graph file")
             ("work_directory", po::value<std::string>(), "Working directory")
-            ("verbose", po::value<bool>(), "verbose output")
+            ("log_level", po::value<std::string>(), "log level")
             ;
 
     po::variables_map vm;
@@ -40,9 +42,26 @@ bool parse_commandline_options(int argc, char** argv) {
         opts.work_directory = "";
     }
 
-    if (vm.count("verbose")) {
-        opts.verbose = vm["verbose"].as<bool>();
+    if (vm.count("log_level")) {
+        opts.log_level = vm["log_level"].as<std::string>();
+    } else {
+        opts.log_level = "warning";
     }
+
+    // Construct log level table
+
+//    trace,
+//            debug,
+//            info,
+//            warning,
+//            error,
+//            fatal
+    log_levels["fatal"] = boost::log::trivial::fatal;
+    log_levels["error"] = boost::log::trivial::error;
+    log_levels["warning"] = boost::log::trivial::warning;
+    log_levels["info"] = boost::log::trivial::info;
+    log_levels["debug"] = boost::log::trivial::debug;
+    log_levels["trace"] = boost::log::trivial::trace;
 
     return opts.check();
 }
@@ -73,6 +92,12 @@ bool CommandlineOptions::check() {
     // Check partition size
     if (nparts <= 0 || nparts >= 1024) {
         BOOST_LOG_TRIVIAL(fatal) << "nparts should be within (0, 1024)";
+        return false;
+    }
+
+    if (!log_levels.contains(log_level)) {
+        BOOST_LOG_TRIVIAL(fatal) << "Unsupported log level :" << log_level;
+        BOOST_LOG_TRIVIAL(fatal) << "Support options: " << supported_log_levels;
         return false;
     }
 

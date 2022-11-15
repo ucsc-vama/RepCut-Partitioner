@@ -12,13 +12,20 @@
 int main(int argc, char** argv) {
     boost::log::add_console_log(std::cout, boost::log::keywords::format = ">> %Message%");
     boost::log::core::get()->set_filter (
-            boost::log::trivial::severity >= boost::log::trivial::trace
+            boost::log::trivial::severity >= boost::log::trivial::warning
     );
 
     if (!parse_commandline_options(argc, argv)) {
         // Some commandline options are illegal
         exit(-1);
     }
+    // set log level
+    auto boost_log_level = log_levels[opts.log_level];
+    boost::log::core::get()->set_filter (
+            boost::log::trivial::severity >= boost_log_level
+    );
+    BOOST_LOG_TRIVIAL(info) << "Set log level to " << opts.log_level;
+
 
     BOOST_LOG_TRIVIAL(info) << "Read file";
 

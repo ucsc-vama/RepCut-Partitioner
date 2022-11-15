@@ -12,11 +12,12 @@ public:
     std::string graph_filename;
     fs::path work_directory;
     int nparts = -1;
-    bool verbose = false;
+    std::string log_level;
 
     bool check();
 };
 
 extern CommandlineOptions opts;
+extern std::unordered_map<std::string, boost::log::trivial::severity_level> log_levels;
 
 bool parse_commandline_options(int argc, char** argv);

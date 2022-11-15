@@ -45,7 +45,6 @@ void SBitSet::insert(uint32_t elem) {
     uint32_t dat_pos_new = elem / 64;
     uint32_t bit_pos_new = elem % 64;
 
-    uint32_t dat_pos_old = this -> max_elem / 64;
 
     if (dat_pos_new >= dat.size()) {
         uint32_t space_to_grow = dat_pos_new + 1 - dat.size();
@@ -60,7 +59,7 @@ void SBitSet::insert(uint32_t elem) {
     this -> num_elem ++;
 }
 
-uint32_t SBitSet::size() {
+uint32_t SBitSet::size() const {
     return this -> num_elem;
 }
 

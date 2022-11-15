@@ -2,7 +2,6 @@
 #include "dag.h"
 #include <fstream>
 #include <string>
-#include <algorithm>
 
 #include <stdexcept>
 #include <iostream>
@@ -39,12 +38,6 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
             }
 
             if (nums.size() != 2) {
-//                std::vector<std::string> convertedString;
-//                // convert int32_t to string
-//                std::transform(nums.cbegin(), nums.cend(), std::back_inserter(convertedString),
-//                               [](int32_t n) { return std::to_string(n); });
-//                // string join
-//                std::string joinedString = boost::algorithm::join(convertedString, " ");
 
                 BOOST_LOG_TRIVIAL(fatal) << "Incorrect header at line " << lineno << ": " << line;
                 exit(-1);
@@ -121,8 +114,8 @@ bool DirectedAcyclicGraph::checkCorrectness() {
     auto start = std::chrono::system_clock::now();
 
 
-    // Node ids should be continues integers starting from 0
-    // No edge should connects to an invalid node
+    // Node ids should be continued integers starting from 0
+    // No edge should connect to an invalid node
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);

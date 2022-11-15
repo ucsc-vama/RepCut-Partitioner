@@ -10,6 +10,7 @@
 #include <numeric>
 
 #include "cluster_graph.h"
+#include "rcp_util.h"
 #include <iostream>
 
 
@@ -369,4 +370,5 @@ void ClusterGraph::reportPartitionStatus() {
     std::cout << "Duplication weight cost: " << duplicated_weights << " (" << (static_cast<float>(duplicated_weights) * 100.0 / sg_weight) << "%)\n";
     std::cout << "Partition weight: max: " << part_weight_max << ", min: " << part_weight_min << ", avg: " << total_part_weight / v_part_weight.size() << std::endl;
 
+    std::cout << "Weight ib factor: " << calculate_ib_factor(v_part_weight) << std::endl;
 }

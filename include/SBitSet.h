@@ -25,10 +25,10 @@ public:
 
     void insert(uint32_t elem);
 
-    uint32_t size();
-    uint32_t calculate_size();
+    [[nodiscard]] uint32_t size() const;
+    [[nodiscard]] uint32_t calculate_size();
 
-    std::vector<uint32_t>* get_elems();
+    [[nodiscard]] std::vector<uint32_t>* get_elems();
 
 };
 
