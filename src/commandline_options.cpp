@@ -11,7 +11,7 @@ bool parse_commandline_options(int argc, char** argv) {
     po::options_description desc("Allowed options");
     desc.add_options()
             ("help", "produce help message")
-            ("nparts", po::value<int>(), "set compression level")
+            ("nparts", po::value<int>(), "num of partitions")
             ("graph_file", po::value<std::string>(), "input graph file")
             ("work_directory", po::value<std::string>(), "Working directory")
             ("log_level", po::value<std::string>(), "log level")
