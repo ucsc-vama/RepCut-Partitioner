@@ -56,4 +56,4 @@ Each following line represents a node in the graph, includes its IR type, weight
 
 > `IR Type` `Node Weight` `list of output neighbors (nodes that current node connecting to)`
 
-Some example graph files are under `resource` directory.
+~~Some example graph files are under `resource` directory.~~
