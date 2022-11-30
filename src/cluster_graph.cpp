@@ -185,7 +185,7 @@ void ClusterGraph::_build_cluster_graph() {
         }
 
         // Assert: if this cluster is confirmed to be a sink cluster,
-        // it must exists in this->sinkNodes
+        // it must exist in this->sinkNodes
         if (cluster_outNeighs.empty()) {
             assert(std::find(this->sinkNodes.begin(), this->sinkNodes.end(), cluster_id) != this->sinkNodes.end());
         } else {
@@ -225,26 +225,17 @@ void ClusterGraph::_update_cluster_weight() {
 
     for (int cluster_id = 0; cluster_id < this->numNodes; cluster_id++) {
         // Weight starts at 1 to make KaHyPar happy
-        uint32_t cluster_weight = 1;
-        // Stop/Print has a weight of 1/7
-        uint32_t stmt_stop_cnt = 0;
-        uint32_t stmt_print_cnt = 0;
+        float cluster_weight = 1;
 
         for (auto& stmt_id: this->clusters[cluster_id]) {
             if (dag->nodeValid[stmt_id]) {
                 // For every valid nodes, weight must >= 0
                 assert(dag->weight[stmt_id] >= 0);
                 cluster_weight += dag->weight[stmt_id];
-                if (dag->node_stmts[stmt_id].find("Print") == 0) {
-                    // A print
-                    stmt_print_cnt ++;
-                } else if (dag->node_stmts[stmt_id].find("Stop") == 0) {
-                    stmt_stop_cnt ++;
-                }
             }
         }
 
-        this->weight[cluster_id] = cluster_weight + (stmt_stop_cnt + stmt_print_cnt) / 7;
+        this->weight[cluster_id] = cluster_weight;
     }
 
     auto stop = std::chrono::system_clock::now();
@@ -327,17 +318,17 @@ void ClusterGraph::reportPartitionStatus() {
 
     uint32_t sg_size = this -> idToClusterId.size();
     uint32_t sg_valid_size = std::count_if(dag->nodeValid.begin(), dag->nodeValid.end(), [](bool in) {return in;});
-    uint32_t sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), static_cast<uint32_t>(0));
+    float sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), static_cast<float>(0));
 
     uint32_t total_part_size = 0;
-    uint32_t total_part_weight = 0;
+    float total_part_weight = 0;
 
     std::vector<uint32_t> v_part_size;
-    std::vector<uint32_t> v_part_weight;
+    std::vector<float> v_part_weight;
 
     for (uint32_t pid = 0; pid < this -> partitions.size(); pid++) {
         uint32_t part_size = 0;
-        uint32_t part_weight = 0;
+        float part_weight = 0;
 
         auto part_clusters = this -> partitions[pid].get_elems();
         for (auto& cid: *part_clusters) {
@@ -363,9 +354,9 @@ void ClusterGraph::reportPartitionStatus() {
     std::cout << "Duplication stmt cost: " << duplicated_stmts << " (" << (static_cast<float>(duplicated_stmts) * 100.0 / sg_valid_size) << "%)\n";
     std::cout << "Partition size: max: " << part_size_max << ", min: " << part_size_min << ", avg: " << total_part_size / v_part_size.size() << "\n";
 
-    uint32_t duplicated_weights = total_part_weight - sg_weight;
-    uint32_t part_weight_max = *std::max_element(v_part_weight.begin(), v_part_weight.end());
-    uint32_t part_weight_min = *std::min_element(v_part_weight.begin(), v_part_weight.end());
+    float duplicated_weights = total_part_weight - sg_weight;
+    float part_weight_max = *std::max_element(v_part_weight.begin(), v_part_weight.end());
+    float part_weight_min = *std::min_element(v_part_weight.begin(), v_part_weight.end());
     std::cout << "Total node weight (whole design) is " << sg_weight << "\n";
     std::cout << "Duplication weight cost: " << duplicated_weights << " (" << (static_cast<float>(duplicated_weights) * 100.0 / sg_weight) << "%)\n";
     std::cout << "Partition weight: max: " << part_weight_max << ", min: " << part_weight_min << ", avg: " << total_part_weight / v_part_weight.size() << std::endl;

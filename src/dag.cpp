@@ -17,12 +17,10 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
     std::string line;
     uint32_t lineno = 0;
 
-    std::vector<int32_t> nums;
     std::vector<std::string> split_line;
 
     while (std::getline(file, line))
     {
-        nums.clear();
         split_line.clear();
 
         boost::split(split_line, line, boost::is_any_of(" "));
@@ -33,17 +31,15 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
 
             for (auto & i : split_line) {
                 boost::trim(i);
-                int32_t current_num = std::stoi(i);
-                nums.push_back(current_num);
             }
 
-            if (nums.size() != 2) {
+            if (split_line.size() != 2) {
 
                 BOOST_LOG_TRIVIAL(fatal) << "Incorrect header at line " << lineno << ": " << line;
                 exit(-1);
             }
-            this -> numEdges = nums[0];
-            this -> numNodes = nums[1];
+            this -> numEdges = std::stoi(split_line[0]);
+            this -> numNodes = std::stoi(split_line[1]);
 
             // Allocate memory
             this -> weight.resize(this -> numNodes);
@@ -59,11 +55,9 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
 
             for (uint32_t i = 1; i < split_line.size(); i++) {
                 boost::trim(split_line[i]);
-                int32_t current_num = std::stoi(split_line[i]);
-                nums.push_back(current_num);
             }
 
-            int32_t node_weight = nums[0];
+            float node_weight = std::stof(split_line[1]);
             uint32_t node_id = lineno - 1;
             this->node_stmts.push_back(split_line[0]);
 
@@ -76,13 +70,14 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
                 this -> nodeValid[node_id] = true;
 
                 // has edge(s)
-                if (nums.size() > 1) {
-                    for (uint32_t i = 1; i < nums.size(); ++i) {
-                        if (nums[i] < 0) {
+                if (split_line.size() > 1) {
+                    for (uint32_t i = 2; i < split_line.size(); ++i) {
+                        uint32_t num = std::stoi(split_line[i]);
+                        if (num < 0) {
                             BOOST_LOG_TRIVIAL(fatal) << "Node ID must be 0 or positive integer: Line " << lineno;
                             exit(-1);
                         }
-                        uint32_t dst_node = nums[i];
+                        uint32_t dst_node = num;
                         // New edge: node_id -> dst_node
                         this -> inNeigh[dst_node].push_back(node_id);
                         this -> outNeigh[node_id].push_back(dst_node);

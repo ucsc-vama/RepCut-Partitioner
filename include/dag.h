@@ -7,7 +7,7 @@ public:
     uint32_t numNodes = 0;
     uint32_t numEdges = 0;
 
-    std::vector<uint32_t> weight;
+    std::vector<float> weight;
 
     std::vector<bool> nodeValid;
 
