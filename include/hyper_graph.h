@@ -10,6 +10,9 @@
 
 class HyperGraph {
 public:
+    uint32_t numNodes;
+    uint32_t numEdges;
+
     std::vector<std::vector<uint32_t>> nodes;
     std::vector<std::vector<uint32_t>> edges;
 

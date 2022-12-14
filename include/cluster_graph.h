@@ -10,6 +10,8 @@
 #include "dag.h"
 #include "SBitSet.h"
 
+#include "partition_stat.h"
+
 #include <boost/dynamic_bitset.hpp>
 
 class ClusterGraph : public DirectedAcyclicGraph {
@@ -35,7 +37,7 @@ public:
     // -1: unvisited
     // -2 invalid
     std::vector<int32_t> idToClusterId;
-    std::vector<std::set<uint32_t>> idToConeId;
+    std::vector<std::unordered_set<uint32_t>> idToConeId;
 
     std::vector<SBitSet> partitions;
 
@@ -48,7 +50,7 @@ public:
 
     void constructParts(const std::vector<uint32_t>& coneIdToPartId);
 
-    void reportPartitionStatus();
+    PartitionStatistics* reportPartitionStatus();
 };
 
 #endif //RCP_COLLAPSE_GRAPH_H

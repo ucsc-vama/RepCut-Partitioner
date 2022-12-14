@@ -45,12 +45,12 @@ void RepCutPartitioner::_callKaHyPar() {
 
     while (c.running() && std::getline(is, line) && !line.empty()) {
         data.push_back(line);
-        std::cout << line << "\n";
     }
 
     c.wait(ec);
 
     if (ec.value() != 0) {
+        std::cout << line << "\n";
         BOOST_LOG_TRIVIAL(fatal) << "KaHyPar returns non-zero code: " << ec.value();
         exit(-1);
     }

@@ -14,6 +14,7 @@ void HyperGraph::addNode(uint32_t node_id, uint32_t node_weight) {
         this -> nodeWeight.insert(this -> nodeWeight.end(), space_to_grow, -1);
     }
     this -> nodeWeight[node_id] = node_weight;
+    this -> numNodes ++;
 }
 
 void HyperGraph::addEdge(const std::vector<uint32_t>& edge, uint32_t edge_weight) {
@@ -28,6 +29,7 @@ void HyperGraph::addEdge(const std::vector<uint32_t>& edge, uint32_t edge_weight
     for (auto& node_id: edge) {
         this -> nodes[node_id].push_back(edge_id);
     }
+    this -> numEdges ++;
 }
 
 

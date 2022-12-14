@@ -89,8 +89,7 @@ void ClusterGraph::_collect_clusters() {
     auto start = std::chrono::system_clock::now();
 
     // mark cone id
-    // this->idToConeId.insert(this->idToConeId.end(), dag->numNodes, std::set<uint32_t>());
-    this->idToConeId.assign(dag->numNodes, std::set<uint32_t>());
+    this->idToConeId.assign(dag->numNodes, std::unordered_set<uint32_t>());
 
     for (uint32_t cid = 0; cid < this->cones_original_nodes.size(); cid++) {
         for (auto& nid: this->cones_original_nodes[cid]) {
@@ -168,7 +167,7 @@ void ClusterGraph::_build_cluster_graph() {
 
     for (uint32_t cluster_id = 0; cluster_id < this->clusters.size(); cluster_id++) {
         //
-        std::set<uint32_t> cluster_outNeighs;
+        std::unordered_set<uint32_t> cluster_outNeighs;
 
         for (auto &nid: this->clusters[cluster_id]) {
             // save all outNeighs
@@ -187,10 +186,9 @@ void ClusterGraph::_build_cluster_graph() {
         // Assert: if this cluster is confirmed to be a sink cluster,
         // it must exist in this->sinkNodes
         if (cluster_outNeighs.empty()) {
-            assert(std::find(this->sinkNodes.begin(), this->sinkNodes.end(), cluster_id) != this->sinkNodes.end());
-        } else {
+            assert(std::find(this->sinkNodes.begin(), this->sinkNodes.end(), cluster_id) != this->sinkNodes.end());} else {
             // Has descendent(s)
-            std::set<uint32_t> descendent_clusters;
+            std::unordered_set<uint32_t> descendent_clusters;
             for (auto &outNeigh_id: cluster_outNeighs) {
                 int32_t outNeigh_cluster_id = this->idToClusterId[outNeigh_id];
                 // cluster_id == -1 => unvisited
@@ -313,24 +311,24 @@ void ClusterGraph::constructParts(const std::vector<uint32_t>& coneIdToPartId) {
     }
 }
 
-void ClusterGraph::reportPartitionStatus() {
+PartitionStatistics* ClusterGraph::reportPartitionStatus() {
     assert(!this -> partitions.empty());
 
-    uint32_t sg_size = this -> idToClusterId.size();
-    uint32_t sg_valid_size = std::count_if(dag->nodeValid.begin(), dag->nodeValid.end(), [](bool in) {return in;});
-    float sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), static_cast<float>(0));
+    auto ret = new PartitionStatistics();
+
+    ret -> nparts = this -> partitions.size();
+    ret -> sg_size = std::count_if(dag->nodeValid.begin(), dag->nodeValid.end(), [](bool in) {return in;});
+    ret -> sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), static_cast<float>(0));
+
 
     uint32_t total_part_size = 0;
     float total_part_weight = 0;
 
-    std::vector<uint32_t> v_part_size;
-    std::vector<float> v_part_weight;
-
-    for (uint32_t pid = 0; pid < this -> partitions.size(); pid++) {
+    for (auto & partition : this -> partitions) {
         uint32_t part_size = 0;
         float part_weight = 0;
 
-        auto part_clusters = this -> partitions[pid].get_elems();
+        auto part_clusters = partition.get_elems();
         for (auto& cid: *part_clusters) {
             part_size += this -> clusters[cid].size();
             part_weight += this -> weight[cid];
@@ -339,27 +337,20 @@ void ClusterGraph::reportPartitionStatus() {
 
         total_part_size += part_size;
         total_part_weight += part_weight;
-        v_part_size.push_back(part_size);
-        v_part_weight.push_back(part_weight);
 
-        std::cout << "Pid: " << pid << ", part size: " << part_size << ", part weight: " << part_weight << "\n";
+        ret -> partition_size.push_back(part_size);
+        ret -> partition_weights.push_back(part_weight);
     }
 
-    std::cout << "Total node count is " << total_part_size << ", original statement graph has " << sg_valid_size << " valid nodes" << "\n";
-    std::cout << "Total node counts (whole design) is " << sg_size << "\n";
+    ret -> total_part_size = total_part_size;
+    ret -> replication_size = (ret -> total_part_size) - (ret -> sg_size);
+    ret -> replication_rate_size = static_cast<float>(static_cast<float>(ret -> replication_size) * 100.0 / (ret -> sg_size));
+    ret -> ib_factor_size = calculate_ib_factor(ret -> partition_size);
 
-    uint32_t duplicated_stmts = total_part_size - sg_valid_size;
-    uint32_t part_size_max = *std::max_element(v_part_size.begin(), v_part_size.end());
-    uint32_t part_size_min = *std::min_element(v_part_size.begin(), v_part_size.end());
-    std::cout << "Duplication stmt cost: " << duplicated_stmts << " (" << (static_cast<float>(duplicated_stmts) * 100.0 / sg_valid_size) << "%)\n";
-    std::cout << "Partition size: max: " << part_size_max << ", min: " << part_size_min << ", avg: " << total_part_size / v_part_size.size() << "\n";
+    ret -> total_part_weight = total_part_weight;
+    ret -> replication_weight = (ret -> total_part_weight) - (ret -> sg_weight);
+    ret -> replication_rate_weight = static_cast<float>(static_cast<float>(ret -> replication_weight) * 100.0 / (ret -> sg_weight));
+    ret -> ib_factor_weight = calculate_ib_factor(ret -> partition_weights);
 
-    float duplicated_weights = total_part_weight - sg_weight;
-    float part_weight_max = *std::max_element(v_part_weight.begin(), v_part_weight.end());
-    float part_weight_min = *std::min_element(v_part_weight.begin(), v_part_weight.end());
-    std::cout << "Total node weight (whole design) is " << sg_weight << "\n";
-    std::cout << "Duplication weight cost: " << duplicated_weights << " (" << (static_cast<float>(duplicated_weights) * 100.0 / sg_weight) << "%)\n";
-    std::cout << "Partition weight: max: " << part_weight_max << ", min: " << part_weight_min << ", avg: " << total_part_weight / v_part_weight.size() << std::endl;
-
-    std::cout << "Weight ib factor: " << calculate_ib_factor(v_part_weight) << std::endl;
+    return ret;
 }
