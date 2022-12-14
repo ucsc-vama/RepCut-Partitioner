@@ -72,7 +72,6 @@ MoveAction FMRefiner::calculate_action(uint32_t cone_id) {
     MoveAction action{};
     uint32_t from_pid = this -> coneIdToPartId[cone_id];
     uint32_t to_pid = this -> partition_weight_ordered.back().second;
-    assert(from_pid != to_pid);
 
     uint32_t largest_partition = this -> partition_weight_ordered[0].second;
     if (from_pid != largest_partition) {
@@ -81,6 +80,8 @@ MoveAction FMRefiner::calculate_action(uint32_t cone_id) {
         action.valid = false;
         return action;
     }
+
+    assert(from_pid != to_pid);
 
     uint32_t from_overlapping = 0;
     uint32_t to_overlapping = 0;
