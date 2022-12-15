@@ -32,6 +32,8 @@ Binary file is:
 
 `--help`  produce help message
 
+`--no-refine`  disable refiner
+
 `--nparts num`  num of partitions
 
 `--graph_file arg`  input graph file
@@ -46,6 +48,8 @@ Example:
 To partition `boom21-emega` into 4 partitions and set log level to `trace`, use following options:
 
 > rcp --graph_file ./resource/boom21-4mega.graph --work_directory ~/tmp --nparts 4 --log_level trace
+
+Output file is `rcp_output.txt`
 
 # Graph File Format
 

@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     }
 
     cluster_graph -> saveToFile("rcp_output.txt");
-    
+
     std::cout << "Done" << std::endl;
 
     return 0;
