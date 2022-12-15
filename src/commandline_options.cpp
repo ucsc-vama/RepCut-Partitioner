@@ -15,11 +15,16 @@ bool parse_commandline_options(int argc, char** argv) {
             ("graph_file", po::value<std::string>(), "input graph file")
             ("work_directory", po::value<std::string>(), "Working directory")
             ("log_level", po::value<std::string>(), "log level")
+            ("no-refine", "disable refiner")
             ;
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
+
+    if (vm.count("no-refine")) {
+        opts.refine = false;
+    }
 
     if (vm.count("help")) {
         std::cout << desc << "\n";

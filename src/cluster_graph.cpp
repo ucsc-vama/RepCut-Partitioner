@@ -12,7 +12,7 @@
 #include "cluster_graph.h"
 #include "rcp_util.h"
 #include <iostream>
-
+#include <fstream>
 
 // Recursively collect cones
 void ClusterGraph::_collect_cone_worker(std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed) {
@@ -298,8 +298,9 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph *dag) {
     BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Done in " << time_ms << "ms";
 }
 
-void ClusterGraph::constructParts(const std::vector<uint32_t>& coneIdToPartId) {
-    assert(coneIdToPartId.size() == this -> cones_original_nodes.size());
+void ClusterGraph::constructParts(const std::vector<uint32_t>& _coneIdToPartId) {
+    assert(_coneIdToPartId.size() == this -> cones_original_nodes.size());
+    this -> coneIdToPartId = _coneIdToPartId;
     this -> partitions.clear();
     this -> partitions.assign(opts.nparts, SBitSet());
     for (uint32_t cone_id = 0; cone_id < coneIdToPartId.size(); cone_id++) {
@@ -353,4 +354,12 @@ PartitionStatistics* ClusterGraph::reportPartitionStatus() {
     ret -> ib_factor_weight = calculate_ib_factor(ret -> partition_weights);
 
     return ret;
+}
+
+void ClusterGraph::saveToFile(const char *filename) {
+    auto ofs = std::ofstream(opts.work_directory / filename);
+    for (auto pid: this -> coneIdToPartId) {
+        ofs << pid << "\n";
+    }
+    ofs.close();
 }

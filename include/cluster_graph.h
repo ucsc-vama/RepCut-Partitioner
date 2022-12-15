@@ -40,6 +40,7 @@ public:
     std::vector<std::unordered_set<uint32_t>> idToConeId;
 
     std::vector<SBitSet> partitions;
+    std::vector<uint32_t> coneIdToPartId;
 
     const DirectedAcyclicGraph* dag = nullptr;
 
@@ -51,6 +52,8 @@ public:
     void constructParts(const std::vector<uint32_t>& coneIdToPartId);
 
     PartitionStatistics* reportPartitionStatus();
+
+    void saveToFile(const char* filename);
 };
 
 #endif //RCP_COLLAPSE_GRAPH_H

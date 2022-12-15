@@ -64,47 +64,47 @@ int main(int argc, char** argv) {
 
 
     // Refine
+    if (opts.refine) {
+        BOOST_LOG_TRIVIAL(info) << "Start Refiner";
+        auto refine_start = std::chrono::system_clock::now();
 
-    BOOST_LOG_TRIVIAL(info) << "Start Refiner";
-    auto refine_start = std::chrono::system_clock::now();
-
-    auto* rf = new FMRefiner();
-    rf -> cg = cluster_graph;
-    rf -> hg = hyper_graph;
-    rf -> nparts = opts.nparts;
-    rf -> target_ib_factor = 0.03f;
-    rf -> coneIdToPartId = rcp -> coneIdToPartId;
-
-
-    rf -> refine();
-
-    auto refine_stop = std::chrono::system_clock::now();
-    auto refine_duration = std::chrono::duration_cast<std::chrono::milliseconds>(refine_stop - refine_start);
-    uint64_t refine_time_ms = refine_duration.count();
-    BOOST_LOG_TRIVIAL(trace) << "Refiner: Done in " << refine_time_ms << "ms";
+        auto* rf = new FMRefiner();
+        rf -> cg = cluster_graph;
+        rf -> hg = hyper_graph;
+        rf -> nparts = opts.nparts;
+        rf -> target_ib_factor = 0.03f;
+        rf -> coneIdToPartId = rcp -> coneIdToPartId;
 
 
-    BOOST_LOG_TRIVIAL(info) << "Construct partition from Refiner result";
-    cluster_graph -> constructParts(rf -> coneIdToPartId);
+        rf -> refine();
 
+        auto refine_stop = std::chrono::system_clock::now();
+        auto refine_duration = std::chrono::duration_cast<std::chrono::milliseconds>(refine_stop - refine_start);
+        uint64_t refine_time_ms = refine_duration.count();
+        BOOST_LOG_TRIVIAL(trace) << "Refiner: Done in " << refine_time_ms << "ms";
 
-    auto stat_after_refine = cluster_graph -> reportPartitionStatus();
-    stat_after_refine -> print_stat();
+        BOOST_LOG_TRIVIAL(info) << "Construct partition from Refiner result";
+        cluster_graph -> constructParts(rf -> coneIdToPartId);
 
+        auto stat_after_refine = cluster_graph -> reportPartitionStatus();
+        stat_after_refine -> print_stat();
 
+        std::cout << "Refine: ib factor from "
+                  << stat_before_refine -> ib_factor_weight
+                  << " to " << stat_after_refine -> ib_factor_weight << "\n";
+        std::cout << "Refine: replication rate from "
+                  << stat_before_refine -> replication_rate_weight << "% to "
+                  << stat_after_refine -> replication_rate_weight << "%\n";
 
-    std::cout << "Refine: ib factor from "
-            << stat_before_refine -> ib_factor_weight
-            << " to " << stat_after_refine -> ib_factor_weight << "\n";
-    std::cout << "Refine: replication rate from "
-            << stat_before_refine -> replication_rate_weight << "% to "
-            << stat_after_refine -> replication_rate_weight << "%\n";
+        float part_weight_max_before = *std::max_element(stat_before_refine -> partition_weights.begin(), stat_before_refine -> partition_weights.end());
+        float part_weight_max_after = *std::max_element(stat_after_refine -> partition_weights.begin(), stat_after_refine -> partition_weights.end());
 
-    float part_weight_max_before = *std::max_element(stat_before_refine -> partition_weights.begin(), stat_before_refine -> partition_weights.end());
-    float part_weight_max_after = *std::max_element(stat_after_refine -> partition_weights.begin(), stat_after_refine -> partition_weights.end());
+        std::cout << "Refine: max weight from " << part_weight_max_before << " to " << part_weight_max_after << " (" << (part_weight_max_after / part_weight_max_before) << "x)\n";
 
-    std::cout << "Refine: max weight from " << part_weight_max_before << " to " << part_weight_max_after << " (" << (part_weight_max_after / part_weight_max_before) << "x)\n";
+    }
 
+    cluster_graph -> saveToFile("rcp_output.txt");
+    
     std::cout << "Done" << std::endl;
 
     return 0;

@@ -13,6 +13,7 @@ public:
     fs::path work_directory;
     int nparts = -1;
     std::string log_level;
+    bool refine = true;
 
     bool check();
 };
