@@ -15,15 +15,20 @@ bool parse_commandline_options(int argc, char** argv) {
             ("graph_file", po::value<std::string>(), "input graph file")
             ("work_directory", po::value<std::string>(), "Working directory")
             ("log_level", po::value<std::string>(), "log level")
-            ("no-refine", "disable refiner")
+            ("no_refine", "disable refiner")
+            ("target_ib", po::value<float>() ->default_value(0.03f), "target imbalance factor, default 0.03")
             ;
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
 
-    if (vm.count("no-refine")) {
+    if (vm.count("no_refine")) {
         opts.refine = false;
+    }
+
+    if (vm.count("target_ib")) {
+        opts.target_ib = vm["target_ib"].as<float>();
     }
 
     if (vm.count("help")) {

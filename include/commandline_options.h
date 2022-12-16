@@ -14,6 +14,7 @@ public:
     int nparts = -1;
     std::string log_level;
     bool refine = true;
+    float target_ib = 0.03f;
 
     bool check();
 };

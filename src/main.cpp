@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
         rf -> cg = cluster_graph;
         rf -> hg = hyper_graph;
         rf -> nparts = opts.nparts;
-        rf -> target_ib_factor = 0.03f;
+        rf -> target_ib_factor = opts.target_ib;
         rf -> coneIdToPartId = rcp -> coneIdToPartId;
 
 
