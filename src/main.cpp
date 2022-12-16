@@ -6,6 +6,7 @@
 #include "hyper_graph.h"
 #include "rep_cut_partitioner.h"
 #include "refiner.h"
+#include "reconstructor.h"
 
 #include <boost/log/utility/setup/console.hpp>
 
@@ -64,11 +65,12 @@ int main(int argc, char** argv) {
 
 
     // Refine
+    auto* rf = new FMRefiner();
+
     if (opts.refine) {
         BOOST_LOG_TRIVIAL(info) << "Start Refiner";
         auto refine_start = std::chrono::system_clock::now();
 
-        auto* rf = new FMRefiner();
         rf -> cg = cluster_graph;
         rf -> hg = hyper_graph;
         rf -> nparts = opts.nparts;
@@ -103,9 +105,22 @@ int main(int argc, char** argv) {
 
     }
 
-    cluster_graph -> saveToFile("rcp_output.txt");
+    BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
+
+    auto reconstructor = new Reconstructor();
+    reconstructor -> construct(cluster_graph);
+
+    BOOST_LOG_TRIVIAL(info) << "Writing to output file";
+    reconstructor -> saveToFile("rcp_output.txt");
 
     std::cout << "Done" << std::endl;
+
+    delete reconstructor;
+    delete rcp;
+    delete rf;
+    delete hyper_graph;
+    delete cluster_graph;
+    delete input_dag;
 
     return 0;
 }

@@ -28,6 +28,7 @@ add_executable(rcp
         src/SBitSet.cpp
         src/rcp_util.cpp
         src/refiner.cpp
-        src/partition_stat.cpp)
+        src/partition_stat.cpp
+        src/reconstructor.cpp)
 target_precompile_headers(rcp PUBLIC include/rcp_common.h)
 target_link_libraries(rcp ${Boost_LIBRARIES})

@@ -356,10 +356,3 @@ PartitionStatistics* ClusterGraph::reportPartitionStatus() {
     return ret;
 }
 
-void ClusterGraph::saveToFile(const char *filename) {
-    auto ofs = std::ofstream(opts.work_directory / filename);
-    for (auto pid: this -> coneIdToPartId) {
-        ofs << pid << "\n";
-    }
-    ofs.close();
-}

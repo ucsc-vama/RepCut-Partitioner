@@ -53,7 +53,6 @@ public:
 
     PartitionStatistics* reportPartitionStatus();
 
-    void saveToFile(const char* filename);
 };
 
 #endif //RCP_COLLAPSE_GRAPH_H

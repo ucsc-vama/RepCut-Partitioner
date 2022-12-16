@@ -17,6 +17,8 @@ void RepCutPartitioner::_writeKaHyParConfig() {
 }
 
 void RepCutPartitioner::_callKaHyPar() {
+    BOOST_LOG_TRIVIAL(info) << "Call KaHyPar";
+
     std::vector<std::string> args;
 
     args.push_back("-h");
@@ -100,7 +102,7 @@ void RepCutPartitioner::partition() {
                                                   % this -> kahypar_imbalance_factor
                                                   % this -> kahypar_seed).str();
 
-    // write to hmetis
+    // write to hmetis file
     auto hmetis_fullpath = opts.work_directory / this -> hmetis_filename;
     this -> hg -> writeTohMetisFile(hmetis_fullpath.c_str());
 
