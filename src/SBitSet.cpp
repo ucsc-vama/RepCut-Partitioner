@@ -79,7 +79,7 @@ std::vector<uint32_t>* SBitSet::get_elems() {
 
     uint32_t cursor = 0;
 
-    while (cursor < max_elem) {
+    while (cursor <= max_elem) {
         uint32_t dat_pos = cursor / 64;
         uint32_t bit_pos = cursor % 64;
 
