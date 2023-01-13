@@ -14,7 +14,7 @@ A C++ re-implementation of RepCut partitioner (See essent-parallel-paper repo)
 # Build
 Create a build directory
 
-> mkdir build
+> mkdir build && cd build
 
 Create Makefile:
 
