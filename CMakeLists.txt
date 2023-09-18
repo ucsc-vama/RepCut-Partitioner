@@ -27,7 +27,6 @@ add_executable(rcp
         src/rep_cut_partitioner.cpp
         src/SBitSet.cpp
         src/rcp_util.cpp
-        src/refiner.cpp
         src/partition_stat.cpp
         src/reconstructor.cpp)
 target_precompile_headers(rcp PUBLIC include/rcp_common.h)

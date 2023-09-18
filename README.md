@@ -32,8 +32,6 @@ Binary file is:
 
 `--help`  produce help message
 
-`--no_refine`  disable refiner
-
 `--target_ib` target imbalance factor. Default value is 0.03
 
 `--nparts num`  num of partitions
