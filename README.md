@@ -56,8 +56,10 @@ Output file is `rcp_output.txt`
 The input graph file is similar with `Metis` input format. The first line contains number of edges and nodes in the graph (separate by space):
 > `numEdges` `numNodes`
 
-Each following line represents a node in the graph, includes its IR type, weight and connecting nodes (out neighbors). Node id starts from 0 (i.e. line 1 is node 0, line 2 is node 1) and line separated by space. A node weight less than 0 indicates an invalid node. For correctness, any invalid node should not has any connecting nodes.
+Each following line represents a node in the graph, includes its label, weight and connecting nodes (out neighbors). Node id starts from 0 (i.e. line 1 is node 0, line 2 is node 1) and line separated by space. A node weight less than 0 indicates an invalid node, and such invalid nodes will not participate in later partitioning. For correctness, any invalid node should not has any connecting nodes.
 
-> `IR Type` `Node Weight` `list of output neighbors (nodes that current node connecting to)`
+> `Label` `Node Weight` `list of output neighbors (nodes that current node connecting to)`
 
-~~Some example graph files are under `resource` directory.~~
+Value of `Label` will not affect partitioning result. However, the `Label` is mandatory and should not contain space.
+
+An example graph files is under `example` directory.
