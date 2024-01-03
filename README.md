@@ -14,19 +14,20 @@ A C++ re-implementation of RepCut partitioner (See essent-parallel-paper repo)
 # Build
 Create a build directory
 
+> mkdir install
 > mkdir build && cd build
 
 Create Makefile:
 
-> cmake  .. -DCMAKE_BUILD_TYPE=RELEASE
+> cmake  .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install
 
-Build:
+Build & install:
 
-> make
+> make install
 
 Binary file is:
 
-> build/rcp
+> install/bin/rcp
 
 # Command Line Options
 
@@ -45,11 +46,11 @@ Binary file is:
 
 Example:
 
-To partition `boom21-emega` into 4 partitions and set log level to `trace`, use following options:
+To partition graph file `rocket21-1c.graph` into 4 partitions and set log level to `trace`, use following options:
 
-> rcp --graph_file ./resource/boom21-4mega.graph --work_directory ~/tmp --nparts 4 --log_level trace
+> rcp --graph_file ./example/rocket21-1c.graph --work_directory ~/tmp --nparts 4 --log_level trace
 
-Output file is `rcp_output.txt`
+Output file will be written to `rcp_output.txt` under work directory.
 
 # Graph File Format
 
