@@ -2,6 +2,7 @@
 *.d
 
 build/
+install/
 cmake-build-debug/
 .idea/
 # Compiled Object files
