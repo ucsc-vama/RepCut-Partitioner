@@ -15,7 +15,11 @@ public:
     // id: id in input DAG
     std::vector<SBitSet> partitions;
 
-    void construct(ClusterGraph* cg);
+    std::string work_directory;
+
+    void set_work_directory(const std::string& work_dir) {work_directory = work_dir;};
+
+    void construct(const int nparts, ClusterGraph* cg);
 
     void saveToFile(const char* filename);
 };

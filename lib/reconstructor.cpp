@@ -3,18 +3,17 @@
 //
 
 #include "reconstructor.h"
-#include "commandline_options.h"
 
 #include <fstream>
 
-void Reconstructor::construct(ClusterGraph* cg) {
+void Reconstructor::construct(const int nparts, ClusterGraph* cg) {
     BOOST_LOG_TRIVIAL(info) << "Reconstruct: Start";
     auto start = std::chrono::system_clock::now();
 
     this -> partitions.clear();
-    this -> partitions.assign(opts.nparts, SBitSet());
+    this -> partitions.assign(nparts, SBitSet());
 
-    for (uint32_t pid = 0; pid < opts.nparts; pid++) {
+    for (uint32_t pid = 0; pid < nparts; pid++) {
         auto partition_clusters = cg -> partitions[pid].get_elems();
 
         for (auto cid: *partition_clusters) {
@@ -36,9 +35,9 @@ void Reconstructor::saveToFile(const char* filename) {
     BOOST_LOG_TRIVIAL(info) << "Write to file: Start";
     auto start = std::chrono::system_clock::now();
 
-    auto ofs = std::ofstream(opts.work_directory / filename);
+    auto ofs = std::ofstream(work_directory + "/" + filename);
 
-    for (uint32_t pid = 0; pid < opts.nparts; pid++) {
+    for (uint32_t pid = 0; pid < partitions.size(); pid++) {
         auto partition_nodes = this -> partitions[pid].get_elems();
 
         for (auto sg_id: *partition_nodes) {

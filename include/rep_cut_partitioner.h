@@ -6,7 +6,6 @@
 #define RCP_REP_CUT_PARTITIONER_H
 
 #include "rcp_common.h"
-#include "commandline_options.h"
 #include "hyper_graph.h"
 
 class RepCutPartitioner {
@@ -102,8 +101,11 @@ public:
     std::vector<uint32_t> coneIdToPartId;
     std::vector<std::vector<uint32_t>> partIdToConeId;
 
+    std::string work_directory;
 
-    void partition();
+    void set_work_directory(const std::string& work_dir) {work_directory = work_dir;};
+
+    void partition(const int nparts);
 };
 
 #endif //RCP_REP_CUT_PARTITIONER_H

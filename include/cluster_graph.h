@@ -49,7 +49,7 @@ public:
 
     void collapseFromDAG(const DirectedAcyclicGraph* dag);
 
-    void constructParts(const std::vector<uint32_t>& coneIdToPartId);
+    void constructParts(const int nparts, const std::vector<uint32_t>& coneIdToPartId);
 
     PartitionStatistics* reportPartitionStatus();
 

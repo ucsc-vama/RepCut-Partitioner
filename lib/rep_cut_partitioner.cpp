@@ -11,7 +11,7 @@
 
 
 void RepCutPartitioner::_writeKaHyParConfig() {
-    auto ofs = std::ofstream(opts.work_directory / this -> kahypar_config_filename);
+    auto ofs = std::ofstream(work_directory / this -> kahypar_config_filename);
     ofs << this -> kahypar_config_content;
     ofs.close();
 }
@@ -22,13 +22,13 @@ void RepCutPartitioner::_callKaHyPar() {
     std::vector<std::string> args;
 
     args.push_back("-h");
-    args.push_back(opts.work_directory / this -> hmetis_filename);
+    args.push_back(work_directory / this -> hmetis_filename);
     args.push_back("-k");
     args.push_back(std::to_string(this -> desired_parts));
     args.push_back("-e");
     args.push_back(std::to_string(this -> kahypar_imbalance_factor));
     args.push_back("-p");
-    args.push_back(opts.work_directory / this -> kahypar_config_filename);
+    args.push_back(work_directory / this -> kahypar_config_filename);
     args.push_back("--seed");
     args.push_back(std::to_string(this -> kahypar_seed));
     args.push_back("-w");
@@ -60,7 +60,7 @@ void RepCutPartitioner::_callKaHyPar() {
 
 
 void RepCutPartitioner::_parseKaHyParResult() {
-    auto kahypar_output_fullpath = opts.work_directory / this -> kahypar_output_filename;
+    auto kahypar_output_fullpath = work_directory / this -> kahypar_output_filename;
 
     auto file_status = fs::status(kahypar_output_fullpath);
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
@@ -89,12 +89,12 @@ void RepCutPartitioner::_parseKaHyParResult() {
 }
 
 
-void RepCutPartitioner::partition() {
+void RepCutPartitioner::partition(const int nparts) {
     BOOST_LOG_TRIVIAL(trace) << "RepCut Partitioner: Start";
     auto start = std::chrono::system_clock::now();
 
     assert(this -> hg != nullptr);
-    this -> desired_parts = opts.nparts;
+    this -> desired_parts = nparts;
     const std::string fmt_str = "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar";
     this -> kahypar_output_filename = (boost::format(fmt_str)
                                                   % this -> hmetis_filename.string()
@@ -103,7 +103,7 @@ void RepCutPartitioner::partition() {
                                                   % this -> kahypar_seed).str();
 
     // write to hmetis file
-    auto hmetis_fullpath = opts.work_directory / this -> hmetis_filename;
+    auto hmetis_fullpath = work_directory / this -> hmetis_filename;
     this -> hg -> writeTohMetisFile(hmetis_fullpath.c_str());
 
     // Write kahypar config file

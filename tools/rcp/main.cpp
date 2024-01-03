@@ -50,15 +50,17 @@ int main(int argc, char** argv) {
     BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
     auto* rcp = new RepCutPartitioner();
     rcp -> hg = hyper_graph;
-    rcp -> partition();
+    rcp -> set_work_directory(opts.work_directory);
+    rcp -> partition(opts.nparts);
 
     BOOST_LOG_TRIVIAL(info) << "Construct partition from RCP result";
-    cluster_graph -> constructParts(rcp -> coneIdToPartId);
+    cluster_graph -> constructParts(opts.nparts, rcp -> coneIdToPartId);
 
     BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
 
     auto reconstructor = new Reconstructor();
-    reconstructor -> construct(cluster_graph);
+    reconstructor -> set_work_directory(opts.work_directory);
+    reconstructor -> construct(opts.nparts, cluster_graph);
 
     BOOST_LOG_TRIVIAL(info) << "Writing to output file";
     reconstructor -> saveToFile("rcp_output.txt");

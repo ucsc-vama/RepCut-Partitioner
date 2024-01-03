@@ -4,7 +4,8 @@ project(rcp)
 set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
-include_directories(src)
+# include_directories(lib)
+
 
 
 find_package(Boost 1.69 REQUIRED COMPONENTS program_options log_setup log)
@@ -17,17 +18,8 @@ message(STATUS "Boost Library Dirs: ${Boost_LIBRARY_DIRS}")
 message(STATUS "Boost Libraries: ${Boost_LIBRARIES}")
 
 
+add_subdirectory(lib)
+add_subdirectory(tools)
 
-add_executable(rcp
-        src/main.cpp
-        src/commandline_options.cpp
-        src/dag.cpp
-        src/cluster_graph.cpp
-        src/hyper_graph.cpp
-        src/rep_cut_partitioner.cpp
-        src/SBitSet.cpp
-        src/rcp_util.cpp
-        src/partition_stat.cpp
-        src/reconstructor.cpp)
-target_precompile_headers(rcp PUBLIC include/rcp_common.h)
-target_link_libraries(rcp ${Boost_LIBRARIES})
+install(TARGETS rcp DESTINATION bin)
+install(TARGETS repcut DESTINATION lib)

@@ -3,7 +3,6 @@
 //
 
 #include "rcp_common.h"
-#include "commandline_options.h"
 
 #include <chrono>
 #include <algorithm>
@@ -298,11 +297,11 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph *dag) {
     BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Done in " << time_ms << "ms";
 }
 
-void ClusterGraph::constructParts(const std::vector<uint32_t>& _coneIdToPartId) {
+void ClusterGraph::constructParts(const int nparts, const std::vector<uint32_t>& _coneIdToPartId) {
     assert(_coneIdToPartId.size() == this -> cones_original_nodes.size());
     this -> coneIdToPartId = _coneIdToPartId;
     this -> partitions.clear();
-    this -> partitions.assign(opts.nparts, SBitSet());
+    this -> partitions.assign(nparts, SBitSet());
     for (uint32_t cone_id = 0; cone_id < coneIdToPartId.size(); cone_id++) {
         uint32_t part_id = coneIdToPartId[cone_id];
 
