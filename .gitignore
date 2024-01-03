@@ -1,6 +1,7 @@
 # Prerequisites
 *.d
 
+.vscode/
 build/
 install/
 cmake-build-debug/
