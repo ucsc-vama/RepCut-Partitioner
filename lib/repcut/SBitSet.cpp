@@ -5,6 +5,8 @@
 #include "SBitSet.h"
 #include <bit>
 
+using namespace repcut;
+
 SBitSet::SBitSet(const std::vector<const SBitSet*>& srcs) {
     uint32_t max_blks = 0;
     for (auto src: srcs) {

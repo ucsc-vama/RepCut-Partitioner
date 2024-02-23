@@ -13,6 +13,8 @@
 #include <iostream>
 #include <fstream>
 
+using namespace repcut;
+
 // Recursively collect cones
 void ClusterGraph::_collect_cone_worker(std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed) {
     if (!cache.contains(seed)) {

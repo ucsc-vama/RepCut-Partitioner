@@ -9,6 +9,8 @@
 
 #include <boost/log/utility/setup/console.hpp>
 
+using namespace repcut;
+
 
 int main(int argc, char** argv) {
     boost::log::add_console_log(std::cout, boost::log::keywords::format = ">> %Message%");

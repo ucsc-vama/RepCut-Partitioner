@@ -5,6 +5,8 @@
 #include "partition_stat.h"
 #include <iostream>
 
+using namespace repcut;
+
 void PartitionStatistics::print_stat() {
     std::cout << "================== Report Partition Statistics ==================\n";
     for (uint32_t pid = 0; pid < nparts; pid++) {

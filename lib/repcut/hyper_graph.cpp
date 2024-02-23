@@ -5,6 +5,8 @@
 #include <fstream>
 #include <boost/algorithm/string.hpp>
 
+using namespace repcut;
+
 void HyperGraph::addNode(uint32_t node_id, uint32_t node_weight) {
     assert(node_weight > 0);
     if (node_id >= this -> nodes.size()) {

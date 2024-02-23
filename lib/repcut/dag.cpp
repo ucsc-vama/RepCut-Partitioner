@@ -9,6 +9,8 @@
 
 #include <boost/algorithm/string.hpp>
 
+using namespace repcut;
+
 void DirectedAcyclicGraph::buildFromFile(const char *filename) {
     BOOST_LOG_TRIVIAL(trace) << "Build DAG from file: Start";
     auto start = std::chrono::system_clock::now();

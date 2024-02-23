@@ -10,6 +10,9 @@
 #include <boost/process.hpp>
 
 
+using namespace repcut;
+
+
 void RepCutPartitioner::_writeKaHyParConfig() {
     auto ofs = std::ofstream(work_directory / this -> kahypar_config_filename);
     ofs << this -> kahypar_config_content;

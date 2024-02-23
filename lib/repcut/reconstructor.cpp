@@ -6,6 +6,8 @@
 
 #include <fstream>
 
+using namespace repcut;
+
 void Reconstructor::construct(const int nparts, ClusterGraph* cg) {
     BOOST_LOG_TRIVIAL(info) << "Reconstruct: Start";
     auto start = std::chrono::system_clock::now();

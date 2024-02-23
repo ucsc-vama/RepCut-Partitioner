@@ -8,27 +8,31 @@
 #include "rcp_common.h"
 #include "cluster_graph.h"
 
-class HyperGraph {
-public:
-    uint32_t numNodes;
-    uint32_t numEdges;
+namespace repcut {
+    class HyperGraph {
+    public:
+        uint32_t numNodes;
+        uint32_t numEdges;
 
-    std::vector<std::vector<uint32_t>> nodes;
-    std::vector<std::vector<uint32_t>> edges;
+        std::vector<std::vector<uint32_t>> nodes;
+        std::vector<std::vector<uint32_t>> edges;
 
-    // Weight should be > 0. A weight < 0 is invalid
-    // Weight == 0 is not supported by KaHyPar
-    std::vector<uint32_t> nodeWeight;
-    std::vector<uint32_t> edgeWeight;
+        // Weight should be > 0. A weight < 0 is invalid
+        // Weight == 0 is not supported by KaHyPar
+        std::vector<uint32_t> nodeWeight;
+        std::vector<uint32_t> edgeWeight;
 
-    void addNode(uint32_t node_id, uint32_t node_weight);
+        void addNode(uint32_t node_id, uint32_t node_weight);
 
-    void addEdge(const std::vector<uint32_t>& edge, uint32_t edge_weight);
+        void addEdge(const std::vector<uint32_t>& edge, uint32_t edge_weight);
 
-    void buildFromClusterGraph(const ClusterGraph* cg);
+        void buildFromClusterGraph(const ClusterGraph* cg);
 
-    void writeTohMetisFile(const char* filename);
-};
+        void writeTohMetisFile(const char* filename);
+    };
+}
+
+
 
 
 #endif //RCP_HYPER_GRAPH_H
