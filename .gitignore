@@ -35,3 +35,8 @@ cmake-build-debug/
 *.exe
 *.out
 *.app
+
+.cache/
+build/
+install/
+
