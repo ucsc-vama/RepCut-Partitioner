@@ -2,6 +2,7 @@
 // Created by Haoyuan Wang on 11/14/22.
 //
 
+#include "rcp_util.h"
 #include <numeric>
 
 namespace repcut {
