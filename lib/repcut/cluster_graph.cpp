@@ -187,7 +187,8 @@ void ClusterGraph::_build_cluster_graph() {
         // Assert: if this cluster is confirmed to be a sink cluster,
         // it must exist in this->sinkNodes
         if (cluster_outNeighs.empty()) {
-            assert(std::find(this->sinkNodes.begin(), this->sinkNodes.end(), cluster_id) != this->sinkNodes.end());} else {
+            assert(std::find(this->sinkNodes.begin(), this->sinkNodes.end(), cluster_id) != this->sinkNodes.end());
+        } else {
             // Has descendent(s)
             std::unordered_set<uint32_t> descendent_clusters;
             for (auto &outNeigh_id: cluster_outNeighs) {
