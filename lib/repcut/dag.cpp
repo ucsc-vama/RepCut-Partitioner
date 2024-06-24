@@ -135,6 +135,7 @@ void DirectedAcyclicGraph::findSinkNodes() {
             }
         }
     }
+    BOOST_LOG_TRIVIAL(debug) << "Found " << sinkNodes.size() << " sink nodes\n";
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
