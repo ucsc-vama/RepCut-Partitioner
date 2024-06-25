@@ -40,22 +40,16 @@ void RepCutPartitioner::_callKaHyPar() {
     args.push_back("direct");
     args.push_back("--objective");
     args.push_back("km1");
+    args.push_back("-v");
+    args.push_back("true");
 
     std::error_code ec;
     boost::process::ipstream  is;
-    boost::process::child c(boost::process::search_path(this -> kahypar_cmd), args, boost::process::std_out > is);
-
-    std::vector<std::string> data;
-    std::string line;
-
-    while (c.running() && std::getline(is, line) && !line.empty()) {
-        data.push_back(line);
-    }
+    boost::process::child c(boost::process::search_path(this -> kahypar_cmd), args);
 
     c.wait(ec);
 
     if (ec.value() != 0) {
-        std::cout << line << "\n";
         BOOST_LOG_TRIVIAL(fatal) << "KaHyPar returns non-zero code: " << ec.value();
         exit(-1);
     }

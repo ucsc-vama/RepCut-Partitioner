@@ -58,6 +58,10 @@ int main(int argc, char** argv) {
     BOOST_LOG_TRIVIAL(info) << "Construct partition from RCP result";
     cluster_graph -> constructParts(opts.nparts, rcp -> coneIdToPartId);
 
+    auto stat = cluster_graph->reportPartitionStatus();
+    stat->print_stat();
+    delete stat;
+
     BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
 
     auto reconstructor = new Reconstructor();
