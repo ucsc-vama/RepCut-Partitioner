@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
 
     BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
     auto* rcp = new RepCutPartitioner();
+    rcp -> kahypar_imbalance_factor = opts.target_ib;
     rcp -> hg = hyper_graph;
     rcp -> set_work_directory(opts.work_directory);
     rcp -> partition(opts.nparts);
