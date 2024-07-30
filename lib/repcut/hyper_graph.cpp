@@ -50,7 +50,7 @@ void HyperGraph::buildFromClusterGraph(const ClusterGraph *cg) {
     // Add nodes
     assert(cg -> cones_original_nodes.size() == cg -> cones_cg_nodes.size());
     for (uint32_t cone_id = 0; cone_id < cg -> cones_cg_nodes.size(); cone_id++) {
-        auto cone_weight = static_cast<uint32_t>(cg -> weight[cone_id]);
+        auto cone_weight = static_cast<uint32_t>(cg -> graph[cone_id].weight);
         std::unordered_set<uint32_t> connected_clusters;
         for (auto& cluster_id: cg -> cones_cg_nodes[cone_id]) {
             if (cluster_id != cone_id) {
@@ -61,7 +61,7 @@ void HyperGraph::buildFromClusterGraph(const ClusterGraph *cg) {
         uint32_t connected_cluster_weights = 0;
         for (auto& cluster_id: connected_clusters) {
             auto pin_count = hePinCount[cluster_id];
-            auto cluster_weight = static_cast<uint32_t>(cg -> weight[cluster_id]);
+            auto cluster_weight = static_cast<uint32_t>(cg -> graph[cluster_id].weight);
             connected_cluster_weights += (cluster_weight / pin_count);
         }
 
@@ -72,7 +72,7 @@ void HyperGraph::buildFromClusterGraph(const ClusterGraph *cg) {
     // Add edges
     assert(cg -> cones_cg_nodes.size() <= cg -> clusters.size());
     for (uint32_t cluster_id = cg -> cones_cg_nodes.size(); cluster_id < cg -> clusters.size(); cluster_id++) {
-        auto edge_weight = static_cast<uint32_t>(cg -> weight[cluster_id]);
+        auto edge_weight = static_cast<uint32_t>(cg -> graph[cluster_id].weight);
         uint32_t cone_idx = cg -> clusters[cluster_id][0];
         std::vector<uint32_t> pins;
         for (auto& pin: cg -> idToConeId[cone_idx]) {

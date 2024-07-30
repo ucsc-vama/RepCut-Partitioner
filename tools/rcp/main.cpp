@@ -34,8 +34,6 @@ int main(int argc, char** argv) {
 
     auto* input_dag = new DirectedAcyclicGraph();
     input_dag->buildFromFile(opts.graph_filename.c_str());
-    bool correct = input_dag->checkCorrectness();
-    if (!correct) exit(-1);
 
     // Find all sink Vtxs
     input_dag->findSinkNodes();

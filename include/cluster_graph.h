@@ -13,9 +13,9 @@
 #include "partition_stat.h"
 
 namespace repcut {
-    class ClusterGraph : public DirectedAcyclicGraph {
+    class ClusterGraph {
     private:
-        void _collect_cone_worker(std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed);
+        void _collect_cone_worker(RawGraph &g, std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed);
         void _collect_cluster_worker(uint32_t cluster_id, uint32_t seed);
 
         void _collect_cones();
@@ -26,6 +26,9 @@ namespace repcut {
 
         void _update_cluster_cone();
     public:
+        RawGraph graph;
+        std::vector<uint32_t> sinkNodes;
+
         // Cone nodes in Stmt DAG
         std::vector<std::vector<uint32_t>> cones_original_nodes;
         // Cone nodes in Cluster Graph
@@ -41,12 +44,12 @@ namespace repcut {
         std::vector<SBitSet> partitions;
         std::vector<uint32_t> coneIdToPartId;
 
-        const DirectedAcyclicGraph* dag = nullptr;
+        DirectedAcyclicGraph* dag = nullptr;
 
         // Cluster weight:
         // std::vector<uint32_t> weight;
 
-        void collapseFromDAG(const DirectedAcyclicGraph* dag);
+        void collapseFromDAG(DirectedAcyclicGraph* dag);
 
         void constructParts(const int nparts, const std::vector<uint32_t>& coneIdToPartId);
 

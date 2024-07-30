@@ -16,18 +16,19 @@
 using namespace repcut;
 
 // Recursively collect cones
-void ClusterGraph::_collect_cone_worker(std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed) {
+void ClusterGraph::_collect_cone_worker(RawGraph &g, std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed) {
     if (!cache.contains(seed)) {
         //
         std::unordered_set<uint32_t> dep_nodes;
         dep_nodes.insert(seed);
-        for (auto& nid: dag->inNeigh[seed]) {
-            if (dag->nodeValid[nid]) {
-                // for all valid nodes
-                _collect_cone_worker(cache, nid);
+        for (auto inEdges = boost::in_edges(seed, g); inEdges.first != inEdges.second; inEdges.first++) {
+            auto nid = boost::source(*inEdges.first, g);
+            if (g[nid].valid) {
+                _collect_cone_worker(g, cache, nid);
                 dep_nodes.insert(cache[nid].begin(), cache[nid].end());
             }
         }
+
         std::vector<uint32_t> dep_nodes_vec;
         dep_nodes_vec.assign(dep_nodes.begin(), dep_nodes.end());
         cache[seed] = std::move(dep_nodes_vec);
@@ -43,12 +44,14 @@ void ClusterGraph::_collect_cluster_worker(uint32_t cluster_id, uint32_t seed) {
         this->idToClusterId[seed] = static_cast<int32_t>(cluster_id);
 
         std::vector<uint32_t> connected_vtxs;
-        for (auto& vtx: dag->inNeigh[seed]) {
+        for (auto inEdges = boost::in_edges(seed, dag->graph); inEdges.first != inEdges.second; inEdges.first++) {
+            auto vtx = boost::source(*inEdges.first, dag->graph);
             if (this->idToClusterId[vtx] == -1) {
                 connected_vtxs.push_back(vtx);
             }
         }
-        for (auto& vtx: dag->outNeigh[seed]) {
+        for (auto outEdges = boost::out_edges(seed, dag->graph); outEdges.first != outEdges.second; outEdges.first++) {
+            auto vtx = boost::target(*outEdges.first, dag->graph);
             if (this->idToClusterId[vtx] == -1) {
                 connected_vtxs.push_back(vtx);
             }
@@ -70,8 +73,9 @@ void ClusterGraph::_collect_cones() {
     auto start = std::chrono::system_clock::now();
 
     std::unordered_map<uint32_t, std::vector<uint32_t>> cone_cache;
+    auto numSinkVtxes = dag->sinkNodes.size();
     for (auto& cone_seed: dag->sinkNodes) {
-        _collect_cone_worker(cone_cache, cone_seed);
+        _collect_cone_worker(dag->graph, cone_cache, cone_seed);
     }
 
     for (auto& cone_seed: dag->sinkNodes) {
@@ -90,7 +94,8 @@ void ClusterGraph::_collect_clusters() {
     auto start = std::chrono::system_clock::now();
 
     // mark cone id
-    this->idToConeId.assign(dag->numNodes, std::unordered_set<uint32_t>());
+    auto dagNumVtxes = boost::num_vertices(dag->graph);
+    this->idToConeId.assign(dagNumVtxes, std::unordered_set<uint32_t>());
 
     for (uint32_t cid = 0; cid < this->cones_original_nodes.size(); cid++) {
         for (auto& nid: this->cones_original_nodes[cid]) {
@@ -101,10 +106,10 @@ void ClusterGraph::_collect_clusters() {
     // init this->idToClusterId
     // -1: unvisited
     // -2 invalid
-    this->idToClusterId.assign(dag->numNodes, -1);
+    this->idToClusterId.assign(dagNumVtxes, -1);
 
-    for (uint32_t nid = 0; nid < dag-> numNodes; nid++) {
-        if (!(dag->nodeValid[nid])) {
+    for (uint32_t nid = 0; nid < dagNumVtxes; nid++) {
+        if (!(dag->graph[nid].valid)) {
             this->idToClusterId[nid] = -2;
         }
     }
@@ -123,14 +128,14 @@ void ClusterGraph::_collect_clusters() {
     }
 
     // Collect clusters for all remaining nodes
-    assert(this->idToClusterId.size() == dag->numNodes);
+    assert(this->idToClusterId.size() == dagNumVtxes);
     uint32_t cluster_seed = 0;
     while (true) {
-        while ((this->idToClusterId[cluster_seed] != -1) && (cluster_seed < dag->numNodes)) {
+        while ((this->idToClusterId[cluster_seed] != -1) && (cluster_seed < dagNumVtxes)) {
             cluster_seed ++;
         }
 
-        if (cluster_seed >= dag->numNodes) {
+        if (cluster_seed >= dagNumVtxes) {
             break;
         }
 
@@ -159,12 +164,11 @@ void ClusterGraph::_build_cluster_graph() {
     BOOST_LOG_TRIVIAL(trace) << "Build cluster graph: Start";
     auto start = std::chrono::system_clock::now();
 
-    // numEdge: Cannot determine yet
-    this->numEdges = 0;
-    this->numNodes = this->clusters.size();
-    this->inNeigh.assign(this->numNodes, std::vector<uint32_t>());
-    this->outNeigh.assign(this->numNodes, std::vector<uint32_t>());
-    this->weight.assign(this->numNodes, 0);
+    auto numNodes = this->clusters.size();
+    for (size_t i = 0; i < numNodes; i++) {
+        auto newVtx = boost::add_vertex(graph);
+        assert(newVtx == i);
+    }
 
     for (uint32_t cluster_id = 0; cluster_id < this->clusters.size(); cluster_id++) {
         //
@@ -172,12 +176,16 @@ void ClusterGraph::_build_cluster_graph() {
 
         for (auto &nid: this->clusters[cluster_id]) {
             // save all outNeighs
-            cluster_outNeighs.insert(dag->outNeigh[nid].begin(), dag->outNeigh[nid].end());
+            for (auto outEdges = boost::out_edges(nid, dag->graph); outEdges.first != outEdges.second; outEdges.first++) {
+                auto outNeigh_id = boost::target(*outEdges.first, dag->graph);
+                cluster_outNeighs.insert(outNeigh_id);
+            }
         }
 
         for (auto &nid: this->clusters[cluster_id]) {
             // remove all inNeighs
-            for (auto &inNeigh_id: dag->inNeigh[nid]) {
+            for (auto inEdges = boost::in_edges(nid, dag->graph); inEdges.first != inEdges.second; inEdges.first++) {
+                auto inNeigh_id = boost::source(*inEdges.first, dag->graph);
                 if (cluster_outNeighs.contains(inNeigh_id)) {
                     cluster_outNeighs.erase(inNeigh_id);
                 }
@@ -201,14 +209,10 @@ void ClusterGraph::_build_cluster_graph() {
                     descendent_clusters.insert(static_cast<uint32_t>(outNeigh_cluster_id));
                 }
             }
-            // build outNeigh
-            this->outNeigh[cluster_id].assign(descendent_clusters.begin(), descendent_clusters.end());
-        }
-
-        // Last step: Build inNeight from outNeigh
-        for (auto &dst_cid: this->outNeigh[cluster_id]) {
-            this->inNeigh[dst_cid].push_back(cluster_id);
-            this->numEdges ++;
+            // add edge
+            for (auto edge_target: descendent_clusters) {
+                boost::add_edge(cluster_id, edge_target, graph);
+            }
         }
     }
 
@@ -223,19 +227,20 @@ void ClusterGraph::_update_cluster_weight() {
     BOOST_LOG_TRIVIAL(trace) << "Update cluster weight: Start";
     auto start = std::chrono::system_clock::now();
 
-    for (int cluster_id = 0; cluster_id < this->numNodes; cluster_id++) {
+    auto numNodes = boost::num_vertices(graph);
+    for (int cluster_id = 0; cluster_id < numNodes; cluster_id++) {
         // Weight starts at 1 to make KaHyPar happy
         float cluster_weight = 1;
 
         for (auto& stmt_id: this->clusters[cluster_id]) {
-            if (dag->nodeValid[stmt_id]) {
+            if (dag->graph[stmt_id].valid) {
                 // For every valid nodes, weight must >= 0
-                assert(dag->weight[stmt_id] >= 0);
-                cluster_weight += dag->weight[stmt_id];
+                assert(dag->graph[stmt_id].weight >= 0);
+                cluster_weight += dag->graph[stmt_id].weight;
             }
         }
 
-        this->weight[cluster_id] = cluster_weight;
+        graph[cluster_id].weight = cluster_weight;
     }
 
     auto stop = std::chrono::system_clock::now();
@@ -254,7 +259,7 @@ void ClusterGraph::_update_cluster_cone() {
     for (auto& cone: this->cones_original_nodes) {
         std::unordered_set<uint32_t> cone_clusters;
         for (auto& nid: cone) {
-            assert(dag->nodeValid[nid]);
+            assert(dag->graph[nid].valid);
             auto node_cluster_id = this->idToClusterId[nid];
             assert(node_cluster_id >= 0);
             cone_clusters.insert(node_cluster_id);
@@ -271,7 +276,7 @@ void ClusterGraph::_update_cluster_cone() {
 }
 
 
-void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph *dag) {
+void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
     BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Start";
     auto start = std::chrono::system_clock::now();
 
@@ -320,8 +325,13 @@ PartitionStatistics* ClusterGraph::reportPartitionStatus() {
     auto ret = new PartitionStatistics();
 
     ret -> nparts = this -> partitions.size();
-    ret -> sg_size = std::count_if(dag->nodeValid.begin(), dag->nodeValid.end(), [](bool in) {return in;});
-    ret -> sg_weight = std::accumulate(this -> weight.begin(), this -> weight.end(), static_cast<float>(0));
+    for (auto vtxes = boost::vertices(dag->graph); vtxes.first != vtxes.second; vtxes.first++) {
+        auto v = *(vtxes.first);
+        if (dag->graph[v].valid) {
+            ret->sg_size++;
+            ret->sg_weight += dag->graph[v].weight;
+        }
+    }
 
 
     uint32_t total_part_size = 0;
@@ -334,7 +344,7 @@ PartitionStatistics* ClusterGraph::reportPartitionStatus() {
         auto part_clusters = partition.get_elems();
         for (auto& cid: *part_clusters) {
             part_size += this -> clusters[cid].size();
-            part_weight += this -> weight[cid];
+            part_weight += this -> graph[cid].weight;
         }
         delete part_clusters;
 

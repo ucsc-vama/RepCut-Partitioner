@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
 
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
+
 project(rcp)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -8,7 +12,7 @@ include_directories(include)
 
 
 
-find_package(Boost 1.69 REQUIRED COMPONENTS program_options log_setup log)
+find_package(Boost REQUIRED COMPONENTS program_options log_setup log filesystem graph)
 #find_package(Boost 1.69 REQUIRED COMPONENTS log)
 
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})

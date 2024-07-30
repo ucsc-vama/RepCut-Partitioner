@@ -36,18 +36,17 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
             }
 
             if (split_line.size() != 2) {
-
                 BOOST_LOG_TRIVIAL(fatal) << "Incorrect header at line " << lineno << ": " << line;
                 exit(-1);
             }
-            this -> numEdges = std::stoi(split_line[0]);
-            this -> numNodes = std::stoi(split_line[1]);
 
-            // Allocate memory
-            this -> weight.resize(this -> numNodes);
-            this -> nodeValid.resize(this -> numNodes);
-            this -> inNeigh.resize(this -> numNodes);
-            this -> outNeigh.resize(this -> numNodes);
+//            size_t numEdges = std::stoi(split_line[0]);
+            size_t numNodes = std::stoi(split_line[1]);
+
+            for (std::size_t i = 0; i < numNodes; ++i) {
+                auto newVtx = boost::add_vertex(graph);
+                assert(newVtx == i);
+            }
         } else{
             // normal line
             if (split_line.size() < 2) {
@@ -59,18 +58,18 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
                 boost::trim(split_line[i]);
             }
 
-            float node_weight = std::stof(split_line[1]);
             uint32_t node_id = lineno - 1;
-            this->node_stmts.push_back(split_line[0]);
 
-            if (node_weight < 0) {
+            RawGraphNodeProperty vp;
+            vp.weight = std::stof(split_line[1]);
+            vp.stmt = split_line[0];
+
+            if (vp.weight < 0) {
                 // An invalid node
-                this -> weight[node_id] = 0;
-                this -> nodeValid[node_id] = false;
+                vp.weight = 0;
+                vp.valid = false;
             } else {
-                this -> weight[node_id] = node_weight;
-                this -> nodeValid[node_id] = true;
-
+                vp.valid = true;
                 // has edge(s)
                 if (split_line.size() > 1) {
                     for (uint32_t i = 2; i < split_line.size(); ++i) {
@@ -81,21 +80,16 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
                         }
                         uint32_t dst_node = num;
                         // New edge: node_id -> dst_node
-                        this -> inNeigh[dst_node].push_back(node_id);
-                        this -> outNeigh[node_id].push_back(dst_node);
+                        boost::add_edge(node_id, dst_node, graph);
                     }
                 }
             }
+            graph[node_id] = vp;
         }
 
         lineno ++;
     }
 
-    if (lineno - 1 != this -> numNodes) {
-        BOOST_LOG_TRIVIAL(fatal) << "Incorrect format: " << this -> numNodes
-            << " Nodes declared, but " << lineno - 1 << " Nodes found";
-        exit(-1);
-    }
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -105,31 +99,16 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
 }
 
 
-bool DirectedAcyclicGraph::checkCorrectness() {
-
-    BOOST_LOG_TRIVIAL(trace) << "Check input correctness: Start";
-    auto start = std::chrono::system_clock::now();
-
-
-    // Node ids should be continued integers starting from 0
-    // No edge should connect to an invalid node
-
-    auto stop = std::chrono::system_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(trace) << "Check input correctness: Done in " << time_ms << "ms";
-
-    return true;
-}
 
 void DirectedAcyclicGraph::findSinkNodes() {
     BOOST_LOG_TRIVIAL(trace) << "Find all sink vtxs: Start";
     auto start = std::chrono::system_clock::now();
 
+    auto numNodes = boost::num_vertices(graph);
     for (uint32_t nid = 0; nid < numNodes; nid++) {
-        if (nodeValid[nid]) {
+        if (graph[nid].valid) {
             // for all valid nodes
-            if (outNeigh[nid].empty()) {
+            if (boost::out_degree(nid, graph) == 0) {
                 // No out edges. This is a sink node
                 sinkNodes.push_back(nid);
             }
