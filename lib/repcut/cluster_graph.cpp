@@ -40,7 +40,7 @@ void ClusterGraph::_collect_cluster_worker(uint32_t cluster_id, uint32_t seed) {
         }
 
         for (auto& vtx: connected_vtxs) {
-            if (this->idToConeId[vtx] == this->idToConeId[seed]) {
+            if (this->idToConeId[vtx].size() == this->idToConeId[seed].size()) {
                 // Same cluster
                 _collect_cluster_worker(cluster_id, vtx);
             }
@@ -185,6 +185,15 @@ void ClusterGraph::_collect_clusters() {
     for (uint32_t sink_cluster_id = 0; sink_cluster_id < dag->sinkNodes.size(); sink_cluster_id++) {
         this->sinkNodes.push_back(sink_cluster_id);
     }
+
+    for (const auto& cluster: clusters) {
+        assert(!cluster.empty());
+        auto pins = idToConeId[cluster[0]];
+        assert(!pins.empty());
+        clusterIdToPins.push_back(pins);
+    }
+    idToConeId.clear();
+    idToConeId.resize(0);
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);

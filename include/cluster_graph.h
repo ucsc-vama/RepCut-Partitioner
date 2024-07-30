@@ -45,6 +45,8 @@ namespace repcut {
 
         DirectedAcyclicGraph* dag = nullptr;
 
+        std::vector<std::unordered_set<uint32_t>> clusterIdToPins;
+
         // Cluster weight:
         // std::vector<uint32_t> weight;
 
