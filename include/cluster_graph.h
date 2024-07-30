@@ -15,7 +15,6 @@
 namespace repcut {
     class ClusterGraph {
     private:
-        void _collect_cone_worker(RawGraph &g, std::unordered_map<uint32_t, std::vector<uint32_t>>& cache, uint32_t seed);
         void _collect_cluster_worker(uint32_t cluster_id, uint32_t seed);
 
         void _collect_cones();
