@@ -40,7 +40,7 @@ void ClusterGraph::_collect_cluster_worker(uint32_t cluster_id, uint32_t seed) {
         }
 
         for (auto& vtx: connected_vtxs) {
-            if (this->idToConeId[vtx].size() == this->idToConeId[seed].size()) {
+            if (verticesHasSameConeIds(vtx, seed)) {
                 // Same cluster
                 _collect_cluster_worker(cluster_id, vtx);
             }
@@ -121,18 +121,84 @@ void ClusterGraph::_collect_cones() {
 }
 
 
+//// Util function that simply add all coneId in a cone to vtxId
+void ClusterGraph::insertConeIds(uint32_t coneId, const std::vector<uint32_t> &cone) {
+    std::unordered_set<uint32_t> coneVtxStorageIds;
+    std::unordered_map<uint32_t, uint32_t> coneVtxStorageIdOldToNew;
+    std::unordered_map<uint32_t, uint32_t> coneVtxStorageIdUserCount;
+    for (auto vtx: cone) {
+        auto vtxConeIdStorage = idToConeIdStorage[vtx];
+        coneVtxStorageIds.insert(vtxConeIdStorage);
+        if (!coneVtxStorageIdUserCount.contains(vtxConeIdStorage)) {
+            coneVtxStorageIdUserCount[vtxConeIdStorage] = 0;
+        }
+        coneVtxStorageIdUserCount[vtxConeIdStorage]++;
+    }
+    // create new cone id set
+    for (const auto &ei: coneVtxStorageIds) {
+        if (coneVtxStorageIdUserCount[ei] != idToConeIdsReferenceCount[ei]) {
+            // need copy
+            assert(!coneIdsStorage.contains(nextStorageId));
+            coneIdsStorage[nextStorageId] = coneIdsStorage[ei];
+            coneIdsStorage[nextStorageId].insert(coneId);
+            coneVtxStorageIdOldToNew[ei] = nextStorageId;
+            nextStorageId++;
+        } else {
+            // No copy needed
+            coneIdsStorage[ei].insert(coneId);
+            coneVtxStorageIdOldToNew[ei] = ei;
+        }
+
+    }
+    for (auto vtx: cone) {
+        auto oldPtr = idToConeIdStorage[vtx];
+        auto newPtr = coneVtxStorageIdOldToNew[oldPtr];
+        if (oldPtr != newPtr) {
+            idToConeIdStorage[vtx] = newPtr;
+            // update reference count
+            assert(idToConeIdsReferenceCount[oldPtr] != 0);
+            idToConeIdsReferenceCount[oldPtr] -= 1;
+            idToConeIdsReferenceCount[newPtr] += 1;
+        }
+
+    }
+    // release unused
+    for (const auto &ei: coneVtxStorageIds) {
+        if (idToConeIdsReferenceCount[ei] == 0) {
+            // can be removed
+            coneIdsStorage.erase(ei);
+            idToConeIdsReferenceCount.erase(ei);
+        }
+    }
+}
+std::unordered_set<uint32_t>& ClusterGraph::getConeIds(uint32_t vtxId) {
+    return coneIdsStorage[idToConeIdStorage[vtxId]];
+}
+bool ClusterGraph::verticesHasSameConeIds(uint32_t vtx1, uint32_t vtx2) {
+    auto storageId1 = idToConeIdStorage[vtx1];
+    auto storageId2 = idToConeIdStorage[vtx2];
+    auto ret = storageId1 == storageId2;
+//    auto ret2 = coneIdsStorage[storageId1] == coneIdsStorage[storageId2];
+//    assert(ret == ret2);
+    return ret;
+}
+
+
+
 void ClusterGraph::_collect_clusters() {
     BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Start";
     auto start = std::chrono::system_clock::now();
 
     // mark cone id
     auto dagNumVtxes = boost::num_vertices(dag->graph);
-    this->idToConeId.assign(dagNumVtxes, std::unordered_set<uint32_t>());
+
+    coneIdsStorage[0] = {};
+    idToConeIdStorage.resize(dagNumVtxes, 0);
+    idToConeIdsReferenceCount[0] = dagNumVtxes;
 
     for (uint32_t cid = 0; cid < this->cones_original_nodes.size(); cid++) {
-        for (auto& nid: this->cones_original_nodes[cid]) {
-            this->idToConeId[nid].insert(cid);
-        }
+        insertConeIds(cid, this->cones_original_nodes[cid]);
+
     }
 
     // init this->idToClusterId
@@ -188,12 +254,18 @@ void ClusterGraph::_collect_clusters() {
 
     for (const auto& cluster: clusters) {
         assert(!cluster.empty());
-        auto pins = idToConeId[cluster[0]];
+        auto pins = getConeIds(cluster[0]);
         assert(!pins.empty());
         clusterIdToPins.push_back(pins);
     }
-    idToConeId.clear();
-    idToConeId.resize(0);
+//    idToConeId.clear();
+//    idToConeId.resize(0);
+    coneIdsStorage.clear();
+    coneIdsStorage.rehash(0);
+    idToConeIdsReferenceCount.clear();
+    idToConeIdsReferenceCount.rehash(0);
+    idToConeIdStorage.clear();
+    idToConeIdStorage.resize(0);
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
