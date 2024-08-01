@@ -47,11 +47,17 @@ int main(int argc, char** argv) {
     auto* hyper_graph = new HyperGraph();
     hyper_graph->buildFromClusterGraph(cluster_graph);
 
+    cluster_graph->clusterIdToPins.clear();
+
     BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
     auto* rcp = new RepCutPartitioner();
     rcp -> kahypar_imbalance_factor = opts.target_ib;
     rcp -> hg = hyper_graph;
     rcp -> set_work_directory(opts.work_directory);
+    rcp -> write_hmetis();
+    // hyper graph is no longer needed. clear
+    delete hyper_graph;
+    rcp -> hg = nullptr;
     rcp -> partition(opts.nparts);
 
     BOOST_LOG_TRIVIAL(info) << "Construct partition from RCP result";
@@ -74,7 +80,7 @@ int main(int argc, char** argv) {
 
     delete reconstructor;
     delete rcp;
-    delete hyper_graph;
+//    delete hyper_graph;
     delete cluster_graph;
     delete input_dag;
 

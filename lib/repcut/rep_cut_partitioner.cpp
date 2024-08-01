@@ -85,12 +85,17 @@ void RepCutPartitioner::_parseKaHyParResult() {
     }
 }
 
+void RepCutPartitioner::write_hmetis() {
+    // write to hmetis file
+    auto hmetis_fullpath = work_directory / this -> hmetis_filename;
+    this -> hg -> writeTohMetisFile(hmetis_fullpath.c_str());
+}
+
 
 void RepCutPartitioner::partition(const int nparts) {
     BOOST_LOG_TRIVIAL(trace) << "RepCut Partitioner: Start";
     auto start = std::chrono::system_clock::now();
 
-    assert(this -> hg != nullptr);
     this -> desired_parts = nparts;
     const std::string fmt_str = "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar";
     this -> kahypar_output_filename = (boost::format(fmt_str)
@@ -98,10 +103,6 @@ void RepCutPartitioner::partition(const int nparts) {
                                                   % this -> desired_parts
                                                   % this -> kahypar_imbalance_factor
                                                   % this -> kahypar_seed).str();
-
-    // write to hmetis file
-    auto hmetis_fullpath = work_directory / this -> hmetis_filename;
-    this -> hg -> writeTohMetisFile(hmetis_fullpath.c_str());
 
     // Write kahypar config file
     this -> _writeKaHyParConfig();

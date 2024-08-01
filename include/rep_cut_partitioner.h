@@ -106,6 +106,8 @@ namespace repcut {
 
         void set_work_directory(const std::string& work_dir) {work_directory = work_dir;};
 
+        void write_hmetis();
+
         void partition(const int nparts);
     };
 }
