@@ -19,7 +19,7 @@ target_sources(
     SBitSet.cpp 
     )
 
-target_compile_features(repcut PUBLIC cxx_std_17)
-target_link_libraries(repcut ${Boost_LIBRARIES})
+# target_compile_features(repcut PUBLIC cxx_std_17)
+target_link_libraries(repcut ${Boost_LIBRARIES} tiny-process-library)
 
 # target_include_directories()

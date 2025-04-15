@@ -7,8 +7,9 @@
 #include <fstream>
 #include <iostream>
 #include <boost/format.hpp>
-#include <boost/process.hpp>
+#include <boost/algorithm/string.hpp>
 
+#include "process.hpp"
 
 using namespace repcut;
 
@@ -23,6 +24,8 @@ void RepCutPartitioner::_callKaHyPar() {
     BOOST_LOG_TRIVIAL(info) << "Call KaHyPar";
 
     std::vector<std::string> args;
+
+    args.push_back(this->kahypar_cmd);
 
     args.push_back("-h");
     args.push_back(work_directory / this -> hmetis_filename);
@@ -43,14 +46,11 @@ void RepCutPartitioner::_callKaHyPar() {
     args.push_back("-v");
     args.push_back("true");
 
-    std::error_code ec;
-    boost::process::ipstream  is;
-    boost::process::child c(boost::process::search_path(this -> kahypar_cmd), args);
+    TinyProcessLib::Process kahypar_process(args, "");
+    auto ret_code = kahypar_process.get_exit_status();
 
-    c.wait(ec);
-
-    if (ec.value() != 0) {
-        BOOST_LOG_TRIVIAL(fatal) << "KaHyPar returns non-zero code: " << ec.value();
+    if (ret_code != 0) {
+        BOOST_LOG_TRIVIAL(fatal) << "KaHyPar returns non-zero code: " << ret_code;
         exit(-1);
     }
 }

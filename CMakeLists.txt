@@ -25,5 +25,7 @@ message(STATUS "Boost Libraries: ${Boost_LIBRARIES}")
 add_subdirectory(lib)
 add_subdirectory(tools)
 
+add_subdirectory(external/tiny-process-library)
+
 install(TARGETS rcp DESTINATION bin)
 install(TARGETS repcut DESTINATION lib)
