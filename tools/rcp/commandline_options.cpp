@@ -16,6 +16,7 @@ bool parse_commandline_options(int argc, char** argv) {
             ("work_directory", po::value<std::string>(), "Working directory")
             ("log_level", po::value<std::string>(), "log level")
             ("target_ib", po::value<float>() ->default_value(0.03f), "target imbalance factor, default 0.03")
+            ("threads", po::value<int>(), "parallel threads pass to MtKaHyPar")
             ;
 
     po::variables_map vm;
@@ -52,6 +53,10 @@ bool parse_commandline_options(int argc, char** argv) {
         opts.log_level = vm["log_level"].as<std::string>();
     } else {
         opts.log_level = "warning";
+    }
+
+    if (vm.count("threads")) {
+        opts.parallel_threads = vm["threads"].as<int>();
     }
 
     // Construct log level table

@@ -9,7 +9,7 @@ A C++ re-implementation of RepCut partitioner (See essent-parallel-paper repo)
 3. boost::log_setup
 4. boost::log
 
-`KaHyPar` binary directory must be in `$PATH`
+`MtKaHyPar` binary directory must be in `$PATH`
 
 # Build
 Create a build directory
@@ -32,6 +32,8 @@ Binary file is:
 # Command Line Options
 
 `--help`  produce help message
+
+`--threads` number of parallel threads passed to MtKaHyPar
 
 `--target_ib` target imbalance factor. Default value is 0.03
 

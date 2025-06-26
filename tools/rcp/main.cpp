@@ -58,6 +58,7 @@ int main(int argc, char** argv) {
     // hyper graph is no longer needed. clear
     delete hyper_graph;
     rcp -> hg = nullptr;
+    rcp -> parallel_threads = opts.parallel_threads;
     rcp -> partition(opts.nparts);
 
     BOOST_LOG_TRIVIAL(info) << "Construct partition from RCP result";

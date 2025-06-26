@@ -14,6 +14,7 @@ public:
     int nparts = -1;
     std::string log_level;
     float target_ib = 0.03f;
+    int parallel_threads = 1;
 
     bool check();
 };

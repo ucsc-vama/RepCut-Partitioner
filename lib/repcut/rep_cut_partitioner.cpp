@@ -4,60 +4,64 @@
 
 #include "rep_cut_partitioner.h"
 
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <boost/format.hpp>
 #include <boost/algorithm/string.hpp>
+#include <string>
+#include <sstream>
 
 #include "process.hpp"
 
 using namespace repcut;
 
 
-void RepCutPartitioner::_writeKaHyParConfig() {
-    auto ofs = std::ofstream(work_directory / this -> kahypar_config_filename);
-    ofs << this -> kahypar_config_content;
-    ofs.close();
-}
 
-void RepCutPartitioner::_callKaHyPar() {
-    BOOST_LOG_TRIVIAL(info) << "Call KaHyPar";
+void RepCutPartitioner::_callMtKaHyPar() {
+    BOOST_LOG_TRIVIAL(info) << "Call MtKaHyPar";
+    assert(this->parallel_threads > 0);
 
     std::vector<std::string> args;
 
-    args.push_back(this->kahypar_cmd);
+    args.push_back(this->mtkahypar_cmd);
 
+    args.push_back("-t");
+    args.push_back(std::to_string(this -> parallel_threads));
     args.push_back("-h");
     args.push_back(work_directory / this -> hmetis_filename);
     args.push_back("-k");
     args.push_back(std::to_string(this -> desired_parts));
     args.push_back("-e");
     args.push_back(std::to_string(this -> kahypar_imbalance_factor));
-    args.push_back("-p");
-    args.push_back(work_directory / this -> kahypar_config_filename);
+    args.push_back("--preset-type");
+    args.push_back("default");
     args.push_back("--seed");
     args.push_back(std::to_string(this -> kahypar_seed));
-    args.push_back("-w");
-    args.push_back("true");
     args.push_back("--mode");
     args.push_back("direct");
-    args.push_back("--objective");
+    args.push_back("-o");
     args.push_back("km1");
-    args.push_back("-v");
-    args.push_back("true");
+    args.push_back("--write-partition-file=true");
+
+    std::ostringstream oss;
+    for (const auto &s: args) {
+        oss << s << " ";
+    }
+    BOOST_LOG_TRIVIAL(info) << "MtKaHyPar cmd: " << oss.str() << "\n";
 
     TinyProcessLib::Process kahypar_process(args, "");
     auto ret_code = kahypar_process.get_exit_status();
 
     if (ret_code != 0) {
-        BOOST_LOG_TRIVIAL(fatal) << "KaHyPar returns non-zero code: " << ret_code;
+        BOOST_LOG_TRIVIAL(fatal) << "MtKaHyPar returns non-zero code: " << ret_code;
         exit(-1);
     }
 }
 
 
 void RepCutPartitioner::_parseKaHyParResult() {
-    auto kahypar_output_fullpath = work_directory / this -> kahypar_output_filename;
+    auto kahypar_output_fullpath = work_directory / this -> mtkahypar_output_filename;
 
     auto file_status = fs::status(kahypar_output_fullpath);
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
@@ -98,17 +102,15 @@ void RepCutPartitioner::partition(const int nparts) {
 
     this -> desired_parts = nparts;
     const std::string fmt_str = "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar";
-    this -> kahypar_output_filename = (boost::format(fmt_str)
+    this -> mtkahypar_output_filename = (boost::format(fmt_str)
                                                   % this -> hmetis_filename.string()
                                                   % this -> desired_parts
                                                   % this -> kahypar_imbalance_factor
                                                   % this -> kahypar_seed).str();
 
-    // Write kahypar config file
-    this -> _writeKaHyParConfig();
 
-    // Call KaHyPar
-    this -> _callKaHyPar();
+    // Call mtKaHyPar
+    this -> _callMtKaHyPar();
 
     this -> _parseKaHyParResult();
 
