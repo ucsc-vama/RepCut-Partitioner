@@ -87,6 +87,7 @@ int main(int argc, char** argv) {
 
     BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
     auto* cluster_graph = new ClusterGraph();
+    cluster_graph->parallel_threads = opts.parallel_threads;
     cluster_graph->collapseFromDAG(input_dag);
 
     PrintMemoryUsage();

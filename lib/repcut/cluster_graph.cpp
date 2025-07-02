@@ -2,8 +2,10 @@
 // Created by Haoyuan Wang on 11/8/22.
 //
 
+#include "dag.h"
 #include "rcp_common.h"
 
+#include <cassert>
 #include <chrono>
 #include <algorithm>
 #include <numeric>
@@ -15,7 +17,8 @@
 
 #include <unordered_set>
 #include <utility>
-
+#include <thread>
+#include <vector>
 
 using namespace repcut;
 
@@ -58,39 +61,91 @@ void ClusterGraph::_collect_cones() {
 
     auto numVtxes = boost::num_vertices(dag->graph);
 
-
-    for (auto& cone_seed: dag->sinkNodes) {
-        // Note: can be parallelized
+    auto collect_cone_worker = [](const uint32_t seed, std::vector<uint32_t> &cone_node_vec, const RawGraph &graph) {
         std::unordered_set<uint32_t> cone_nodes;
-        std::unordered_set<uint32_t> frontier, frontier_next;
+        std::unordered_set<uint32_t> fringe, fringe_next;
 
-        frontier.insert(cone_seed);
+        cone_nodes.reserve(1024);
+        fringe.reserve(128);
+        fringe_next.reserve(128);
+
+        fringe.insert(seed);
 
 
-        while(!frontier.empty()) {
-            frontier_next.clear();
-            for (auto vtx: frontier) {
+        while(!fringe.empty()) {
+            fringe_next.clear();
+            for (auto vtx: fringe) {
                 if (!cone_nodes.contains(vtx)) {
                     cone_nodes.insert(vtx);
 
-                    for (auto inEdges = boost::in_edges(vtx, dag->graph); inEdges.first != inEdges.second; inEdges.first++) {
-                        auto nid = boost::source(*inEdges.first, dag->graph);
-                        if (dag->graph[nid].valid) {
-                            frontier_next.insert(nid);
+                    for (auto inEdges = boost::in_edges(vtx, graph); inEdges.first != inEdges.second; inEdges.first++) {
+                        auto nid = boost::source(*inEdges.first, graph);
+                        if (graph[nid].valid) {
+                            fringe_next.insert(nid);
                         }
                     }      
                 }
             }
 
-            std::swap(frontier, frontier_next);
+            std::swap(fringe, fringe_next);
         }
 
-        std::vector<uint32_t> cone_node_vec;
         cone_node_vec.reserve(cone_nodes.size());
         cone_node_vec.assign(cone_nodes.begin(), cone_nodes.end());
+    };
 
-        this->cones_original_nodes.push_back(std::move(cone_node_vec));
+
+
+
+    std::mutex write_back_lock;
+
+    auto numSinkVtxes = dag->sinkNodes.size();
+    assert(numSinkVtxes > 0);
+
+    cones_original_nodes.resize(numSinkVtxes);
+
+
+
+    const size_t chunk_size = 1000;
+    std::atomic<size_t> next_index(0);
+    std::vector<std::thread> threads;
+
+    for (size_t t = 0; t < parallel_threads; ++t) {
+
+        threads.emplace_back([&] {
+            std::vector<std::vector<uint32_t>> results;
+            results.resize(chunk_size);
+
+            while (true) {
+                size_t i = next_index.fetch_add(1);
+
+                size_t start = i * chunk_size;
+                size_t end = std::min(start + chunk_size, numSinkVtxes);
+
+                if (start >= end) return;
+
+                for (auto j = start; j < end; j++) {
+                    auto seed = dag->sinkNodes.at(j);
+                    auto result_i = j - start;
+                    assert(result_i < chunk_size);
+                    assert(results[result_i].size() == 0);
+                    collect_cone_worker(seed, results[result_i], dag->graph);
+                    assert(results[result_i].size() > 0);
+                }
+
+                write_back_lock.lock();
+                for (auto j = start; j < end; j++) {
+                    std::swap(cones_original_nodes[j], results[j - start]);
+                }
+                write_back_lock.unlock();
+            }
+        });
     }
+
+    for (auto& t : threads) t.join();
+
+    assert(cones_original_nodes.size() == dag->sinkNodes.size());
+
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -173,8 +228,9 @@ void ClusterGraph::_collect_clusters() {
     coneIdsStorage[0] = {};
     idToConeIdStorage.resize(dagNumVtxes, 0);
     idToConeIdsReferenceCount[0] = dagNumVtxes;
+    auto numCones = this->cones_original_nodes.size();
 
-    for (uint32_t cid = 0; cid < this->cones_original_nodes.size(); cid++) {
+    for (uint32_t cid = 0; cid < numCones; cid++) {
         insertConeIds(cid, this->cones_original_nodes[cid]);
 
     }

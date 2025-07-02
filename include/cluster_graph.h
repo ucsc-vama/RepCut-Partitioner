@@ -64,6 +64,7 @@ namespace repcut {
 
         // Cluster weight:
         // std::vector<uint32_t> weight;
+        uint32_t parallel_threads = 1;
 
         void collapseFromDAG(DirectedAcyclicGraph* dag);
 
