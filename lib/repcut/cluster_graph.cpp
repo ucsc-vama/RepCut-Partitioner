@@ -13,7 +13,9 @@
 #include <iostream>
 #include <fstream>
 
-#include <boost/graph/topological_sort.hpp>
+#include <unordered_set>
+#include <utility>
+
 
 using namespace repcut;
 
@@ -56,62 +58,38 @@ void ClusterGraph::_collect_cones() {
 
     auto numVtxes = boost::num_vertices(dag->graph);
 
-    std::unordered_map<uint32_t, std::vector<uint32_t>> cone_cache;
-
-    std::vector<bool> visited;
-    std::vector<uint32_t> topo_order;
-    visited.resize(numVtxes, false);
-    topo_order.reserve(numVtxes);
-    boost::topological_sort(dag->graph, std::back_inserter(topo_order));
-    std::reverse(topo_order.begin(), topo_order.end());
-
-    uint32_t vtxCnt = 0;
-    for (auto vtx: topo_order) {
-        std::unordered_set<uint32_t> dep_nodes;
-        dep_nodes.insert(vtx);
-        for (auto inEdges = boost::in_edges(vtx, dag->graph); inEdges.first != inEdges.second; inEdges.first++) {
-            auto nid = boost::source(*inEdges.first, dag->graph);
-            if (dag->graph[nid].valid) {
-                assert(cone_cache.contains(nid));
-                dep_nodes.insert(cone_cache[nid].begin(), cone_cache[nid].end());
-            }
-        }
-
-        std::vector<uint32_t> dep_nodes_vec;
-        dep_nodes_vec.assign(dep_nodes.begin(), dep_nodes.end());
-        cone_cache[vtx] = std::move(dep_nodes_vec);
-        visited[vtx] = true;
-        vtxCnt++;
-
-        // release memory
-        // cone_cache can be very big, and most contents are rarely used.
-        // scan for unused items every 16383 vtxes
-        // (16383 is just a magic number)
-        if ((vtxCnt & 0x3FFF) == 0) {
-            std::vector<uint32_t> unused_cache;
-            for (const auto &item: cone_cache) {
-                auto key = item.first;
-                if (boost::out_degree(key, dag->graph) == 0) continue;
-                // if all users are visited, this vtx can be removed from cache
-                bool allUsersVisited = true;
-                for (auto outEdges = boost::out_edges(key, dag->graph); outEdges.first != outEdges.second; outEdges.first++) {
-                    auto target = boost::target(*outEdges.first, dag->graph);
-                    if (!visited[target]) {
-                        allUsersVisited = false;
-                        break;
-                    }
-                }
-                if (allUsersVisited) unused_cache.push_back(key);
-            }
-//            std::cout << "Remove " << unused_cache.size() << " unused cache elements\n";
-            for (auto ev: unused_cache) {
-                cone_cache.erase(ev);
-            }
-        }
-    }
 
     for (auto& cone_seed: dag->sinkNodes) {
-        this->cones_original_nodes.push_back(cone_cache[cone_seed]);
+        // Note: can be parallelized
+        std::unordered_set<uint32_t> cone_nodes;
+        std::unordered_set<uint32_t> frontier, frontier_next;
+
+        frontier.insert(cone_seed);
+
+
+        while(!frontier.empty()) {
+            frontier_next.clear();
+            for (auto vtx: frontier) {
+                if (!cone_nodes.contains(vtx)) {
+                    cone_nodes.insert(vtx);
+
+                    for (auto inEdges = boost::in_edges(vtx, dag->graph); inEdges.first != inEdges.second; inEdges.first++) {
+                        auto nid = boost::source(*inEdges.first, dag->graph);
+                        if (dag->graph[nid].valid) {
+                            frontier_next.insert(nid);
+                        }
+                    }      
+                }
+            }
+
+            std::swap(frontier, frontier_next);
+        }
+
+        std::vector<uint32_t> cone_node_vec;
+        cone_node_vec.reserve(cone_nodes.size());
+        cone_node_vec.assign(cone_nodes.begin(), cone_nodes.end());
+
+        this->cones_original_nodes.push_back(std::move(cone_node_vec));
     }
 
     auto stop = std::chrono::system_clock::now();
@@ -399,6 +377,9 @@ void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
 
     // 2. collect cones
     this->_collect_cones();
+
+    // v1: 2mega, 40:19s, 14253MB
+    // v2: 2mega, 22:39, 7335MB
 
     // 3. collect clusters
     this->_collect_clusters();
