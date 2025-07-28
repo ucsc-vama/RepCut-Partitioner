@@ -101,8 +101,8 @@ bool CommandlineOptions::check() {
 
 
     // Check partition size
-    if (nparts <= 0 || nparts >= 1024) {
-        BOOST_LOG_TRIVIAL(fatal) << "nparts should be within (0, 1024)";
+    if (nparts <= 0 || nparts >= 65535) {
+        BOOST_LOG_TRIVIAL(fatal) << "nparts should be within (0, 65535)";
         return false;
     }
 
