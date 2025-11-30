@@ -62,7 +62,7 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
 
             RawGraphNodeProperty vp;
             vp.weight = std::stof(split_line[1]);
-            vp.stmt = split_line[0];
+            // vp.stmt = split_line[0];  // debug only; see RawGraphNodeProperty
 
             if (vp.weight < 0) {
                 // An invalid node

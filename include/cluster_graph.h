@@ -55,6 +55,17 @@ namespace repcut {
         uint32_t parallel_threads = 1;
 
         void collapseFromDAG(DirectedAcyclicGraph* dag);
+
+        // Stream the cluster graph to an hMetis-format file, directly from
+        // the cluster graph's fields.  This replaces the intermediate
+        // HyperGraph buffer that was built only to be serialized.  Byte
+        // output matches HyperGraph::writeTohMetisFile:
+        //   - hypergraph nodes = cone clusters (cone_id in [0, numCones))
+        //   - hypergraph edges = non-cone clusters (cluster_id in [numCones, ...))
+        //   - node/edge weights derived from graph[cid].weight (floor cast)
+        //   - pin list per edge = clusterIdToPins[cid] (already sorted ascending)
+        //   - pin ids written 1-indexed (hMetis/KaHyPar convention)
+        void writeHMetisFile(const char* filename);
     };
 }
 

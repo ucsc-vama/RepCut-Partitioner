@@ -339,3 +339,73 @@ void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
     uint64_t time_ms = duration.count();
     BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Done in " << time_ms << "ms";
 }
+
+// ---------------------------------------------------------------------------
+// Stream cluster graph to the hMetis-format file expected by MtKaHyPar.
+// Mirrors the wire format previously produced by HyperGraph::writeTohMetisFile
+// (header `numEdges numNodes 11`, then weighted edge lines, then per-node
+// weight lines).  Cone clusters (cone_id in [0, numCones)) become hypergraph
+// vertices; non-cone clusters become hyperedges whose pins are their
+// `clusterIdToPins` cone-id list (1-indexed on the wire).  Node weight
+// formula matches HyperGraph::buildFromClusterGraph: own cluster weight plus
+// a proportional share of each connected non-self cluster's weight (divided
+// by that cluster's pin count).
+// ---------------------------------------------------------------------------
+void ClusterGraph::writeHMetisFile(const char* filename) {
+    BOOST_LOG_TRIVIAL(trace) << "Write to hMetis graph file: Start";
+    auto start = std::chrono::system_clock::now();
+
+    const auto numCones = dag->sinkNodes.size();
+    assert(numCones == cones_cg_nodes.size());
+    const auto numEdges = clusters.size() - numCones;
+    const auto numNodes = numCones;
+
+    // Compute node weights upfront so the wire order is header, then all
+    // edges, then all node weights (matching HyperGraph's layout).  Only
+    // numCones uint32_t of transient storage — negligible vs HyperGraph.
+    std::vector<uint32_t> nodeWeights;
+    nodeWeights.reserve(numNodes);
+    for (uint32_t cone_id = 0; cone_id < numCones; ++cone_id) {
+        auto cone_weight = static_cast<uint32_t>(graph[cone_id].weight);
+        uint32_t connected_cluster_weights = 0;
+        for (auto& cluster_id : cones_cg_nodes[cone_id]) {
+            if (cluster_id != cone_id) {
+                auto pin_count = clusterIdToPins[cluster_id].size();
+                auto cluster_weight = static_cast<uint32_t>(graph[cluster_id].weight);
+                connected_cluster_weights += (cluster_weight / pin_count);
+            }
+        }
+        nodeWeights.push_back(cone_weight + connected_cluster_weights);
+    }
+
+    std::ofstream ofs(filename);
+
+    // header: numEdges numNodes "11"
+    ofs << numEdges << " " << numNodes << " 11\n";
+
+    // edges: one line per non-cone cluster, `weight pin1 pin2 ...` (pins 1-indexed)
+    std::string line;
+    for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
+        auto edge_weight = static_cast<uint32_t>(graph[cluster_id].weight);
+
+        line.clear();
+        line += std::to_string(edge_weight);
+        for (auto& pin : clusterIdToPins[cluster_id]) {
+            line += ' ';
+            line += std::to_string(pin + 1);
+        }
+        line += '\n';
+        ofs << line;
+    }
+
+    // nodes: one weight per line
+    for (auto& w : nodeWeights) {
+        ofs << w << "\n";
+    }
+
+    ofs.close();
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    BOOST_LOG_TRIVIAL(trace) << "Write to hMetis graph file: Done in " << duration.count() << "ms";
+}

@@ -3,7 +3,6 @@
 #include "commandline_options.h"
 #include "dag.h"
 #include "cluster_graph.h"
-#include "hyper_graph.h"
 #include "rep_cut_partitioner.h"
 #include "reconstructor.h"
 
@@ -93,13 +92,11 @@ int main(int argc, char** argv) {
     PrintMemoryUsage();
 
 
-    BOOST_LOG_TRIVIAL(info) << "Build hyper graph";
-    auto* hyper_graph = new HyperGraph();
-    hyper_graph->buildFromClusterGraph(cluster_graph);
+    BOOST_LOG_TRIVIAL(info) << "Write hMetis file";
+    const fs::path hmetis_path = opts.work_directory / "parts.hmetis";
+    cluster_graph->writeHMetisFile(hmetis_path.c_str());
 
-    PrintMemoryUsage();
-
-    // Cluster graph is no longer needed once the hypergraph is built.
+    // Cluster graph is no longer needed once the hMetis file is written.
     // Free it before the MtKaHyPar call and reconstruction to cut peak
     // memory during those phases.
     delete cluster_graph;
@@ -110,12 +107,8 @@ int main(int argc, char** argv) {
     BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
     auto* rcp = new RepCutPartitioner();
     rcp -> kahypar_imbalance_factor = opts.target_ib;
-    rcp -> hg = hyper_graph;
+    rcp -> hmetis_path = hmetis_path;
     rcp -> set_work_directory(opts.work_directory);
-    rcp -> write_hmetis();
-    // hyper graph is no longer needed. clear
-    delete hyper_graph;
-    rcp -> hg = nullptr;
     rcp -> parallel_threads = opts.parallel_threads;
     rcp -> partition(opts.nparts);
 
@@ -144,7 +137,6 @@ int main(int argc, char** argv) {
 
     delete reconstructor;
     delete rcp;
-//    delete hyper_graph;
     delete input_dag;
 
     return 0;

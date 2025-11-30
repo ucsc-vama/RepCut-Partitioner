@@ -9,7 +9,12 @@ namespace repcut {
     public:
         float weight;
         bool valid;
-        std::string stmt;
+        // The source statement label parsed from the graph file.  Kept for
+        // debugging only (e.g. dumping a node's identity); never read by the
+        // partitioning pipeline.  Commented out by default because retaining
+        // a std::string per node on designs with millions of vertices is a
+        // substantial memory cost with no runtime benefit.
+        // std::string stmt;
     };
 
     // Note: use boost::vecS (std::vector) to ensure vertex_descriptor is integer and also incremental
