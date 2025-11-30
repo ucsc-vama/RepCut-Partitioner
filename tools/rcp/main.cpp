@@ -99,7 +99,11 @@ int main(int argc, char** argv) {
 
     PrintMemoryUsage();
 
-    cluster_graph->clusterIdToPins.clear();
+    // Cluster graph is no longer needed once the hypergraph is built.
+    // Free it before the MtKaHyPar call and reconstruction to cut peak
+    // memory during those phases.
+    delete cluster_graph;
+    cluster_graph = nullptr;
 
     PrintMemoryUsage();
 
@@ -117,20 +121,17 @@ int main(int argc, char** argv) {
 
     PrintMemoryUsage();
 
-    BOOST_LOG_TRIVIAL(info) << "Construct partition from RCP result";
-    cluster_graph -> constructParts(opts.nparts, rcp -> coneIdToPartId);
-
-    auto stat = cluster_graph->reportPartitionStatus();
-    stat->print_stat();
-    delete stat;
-
-    PrintMemoryUsage();
-
     BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
 
     auto reconstructor = new Reconstructor();
     reconstructor -> set_work_directory(opts.work_directory);
-    reconstructor -> construct(opts.nparts, cluster_graph);
+    reconstructor -> construct(opts.nparts, input_dag, rcp -> coneIdToPartId);
+
+    PrintMemoryUsage();
+
+    auto stat = reconstructor -> reportPartitionStatus(input_dag);
+    stat -> print_stat();
+    delete stat;
 
     PrintMemoryUsage();
 
@@ -144,7 +145,6 @@ int main(int argc, char** argv) {
     delete reconstructor;
     delete rcp;
 //    delete hyper_graph;
-    delete cluster_graph;
     delete input_dag;
 
     return 0;

@@ -17,7 +17,6 @@ target_sources(
     rcp_util.cpp
     reconstructor.cpp 
     rep_cut_partitioner.cpp 
-    SBitSet.cpp 
     )
 
 # target_compile_features(repcut PUBLIC cxx_std_17)

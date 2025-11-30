@@ -13,7 +13,6 @@
 
 #include "cluster_graph.h"
 #include "cone_trie.h"
-#include "rcp_util.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -339,67 +338,4 @@ void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
     BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Done in " << time_ms << "ms";
-}
-
-void ClusterGraph::constructParts(const int nparts, const std::vector<uint32_t>& _coneIdToPartId) {
-    assert(_coneIdToPartId.size() == this -> cones_cg_nodes.size());
-    this -> coneIdToPartId = _coneIdToPartId;
-    this -> partitions.clear();
-    this -> partitions.assign(nparts, SBitSet());
-    for (uint32_t cone_id = 0; cone_id < coneIdToPartId.size(); cone_id++) {
-        uint32_t part_id = coneIdToPartId[cone_id];
-
-        for (auto& cluster_id: this -> cones_cg_nodes[cone_id]) {
-            this -> partitions[part_id].insert(cluster_id);
-        }
-    }
-}
-
-PartitionStatistics* ClusterGraph::reportPartitionStatus() {
-    assert(!this -> partitions.empty());
-
-    auto ret = new PartitionStatistics();
-
-    ret -> nparts = this -> partitions.size();
-    for (auto vtxes = boost::vertices(dag->graph); vtxes.first != vtxes.second; vtxes.first++) {
-        auto v = *(vtxes.first);
-        if (dag->graph[v].valid) {
-            ret->sg_size++;
-            ret->sg_weight += dag->graph[v].weight;
-        }
-    }
-
-
-    uint32_t total_part_size = 0;
-    float total_part_weight = 0;
-
-    for (auto & partition : this -> partitions) {
-        uint32_t part_size = 0;
-        float part_weight = 0;
-
-        auto part_clusters = partition.get_elems();
-        for (auto& cid: *part_clusters) {
-            part_size += this -> clusters[cid].size();
-            part_weight += this -> graph[cid].weight;
-        }
-        delete part_clusters;
-
-        total_part_size += part_size;
-        total_part_weight += part_weight;
-
-        ret -> partition_size.push_back(part_size);
-        ret -> partition_weights.push_back(part_weight);
-    }
-
-    ret -> total_part_size = total_part_size;
-    ret -> replication_size = (ret -> total_part_size) - (ret -> sg_size);
-    ret -> replication_rate_size = static_cast<float>(static_cast<float>(ret -> replication_size) * 100.0 / (ret -> sg_size));
-    ret -> ib_factor_size = calculate_ib_factor(ret -> partition_size);
-
-    ret -> total_part_weight = total_part_weight;
-    ret -> replication_weight = (ret -> total_part_weight) - (ret -> sg_weight);
-    ret -> replication_rate_weight = static_cast<float>(static_cast<float>(ret -> replication_weight) * 100.0 / (ret -> sg_weight));
-    ret -> ib_factor_weight = calculate_ib_factor(ret -> partition_weights);
-
-    return ret;
 }

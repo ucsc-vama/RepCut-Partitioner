@@ -8,9 +8,7 @@
 #include "rcp_common.h"
 
 #include "dag.h"
-#include "SBitSet.h"
 
-#include "partition_stat.h"
 #include "cone_trie.h"
 
 #include <memory>
@@ -45,9 +43,6 @@ namespace repcut {
         // -2 invalid
         std::vector<int32_t> idToClusterId;
 
-        std::vector<SBitSet> partitions;
-        std::vector<uint32_t> coneIdToPartId;
-
         DirectedAcyclicGraph* dag = nullptr;
 
         // Pins per cluster: the (sorted, unique) set of cone ids touching the
@@ -60,11 +55,6 @@ namespace repcut {
         uint32_t parallel_threads = 1;
 
         void collapseFromDAG(DirectedAcyclicGraph* dag);
-
-        void constructParts(const int nparts, const std::vector<uint32_t>& coneIdToPartId);
-
-        PartitionStatistics* reportPartitionStatus();
-
     };
 }
 
