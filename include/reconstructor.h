@@ -7,7 +7,7 @@
 
 #include "rcp_common.h"
 #include "dag.h"
-#include "partition_stat.h"
+#include "rcp_util.h"
 
 namespace repcut {
     class Reconstructor {

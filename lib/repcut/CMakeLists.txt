@@ -12,7 +12,6 @@ target_sources(
     cluster_graph.cpp
     cone_trie.cpp
     dag.cpp
-    partition_stat.cpp
     rcp_util.cpp
     reconstructor.cpp 
     rep_cut_partitioner.cpp 
