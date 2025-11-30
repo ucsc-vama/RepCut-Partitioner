@@ -48,7 +48,6 @@ void HyperGraph::buildFromClusterGraph(const ClusterGraph *cg) {
 //    }
 
     // Add nodes
-    assert(cg -> cones_original_nodes.size() == cg -> cones_cg_nodes.size());
     for (uint32_t cone_id = 0; cone_id < cg -> cones_cg_nodes.size(); cone_id++) {
         auto cone_weight = static_cast<uint32_t>(cg -> graph[cone_id].weight);
         std::unordered_set<uint32_t> connected_clusters;

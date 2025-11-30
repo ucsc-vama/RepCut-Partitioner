@@ -10,6 +10,7 @@ target_sources(
 
     PRIVATE 
     cluster_graph.cpp
+    cone_trie.cpp
     dag.cpp
     hyper_graph.cpp
     partition_stat.cpp

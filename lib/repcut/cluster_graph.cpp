@@ -9,302 +9,188 @@
 #include <chrono>
 #include <algorithm>
 #include <numeric>
+#include <unordered_set>
 
 #include "cluster_graph.h"
+#include "cone_trie.h"
 #include "rcp_util.h"
 #include <iostream>
 #include <fstream>
-
-#include <unordered_set>
-#include <utility>
-#include <thread>
 #include <vector>
 
 using namespace repcut;
 
-// Recursively collect cluster
-void ClusterGraph::_collect_cluster_worker(uint32_t cluster_id, uint32_t seed) {
-
-    if (this->idToClusterId[seed] == -1) {
-        // unvisited
-        this->clusters[cluster_id].push_back(seed);
-        this->idToClusterId[seed] = static_cast<int32_t>(cluster_id);
-
-        std::vector<uint32_t> connected_vtxs;
-        for (auto inEdges = boost::in_edges(seed, dag->graph); inEdges.first != inEdges.second; inEdges.first++) {
-            auto vtx = boost::source(*inEdges.first, dag->graph);
-            if (this->idToClusterId[vtx] == -1) {
-                connected_vtxs.push_back(vtx);
-            }
-        }
-        for (auto outEdges = boost::out_edges(seed, dag->graph); outEdges.first != outEdges.second; outEdges.first++) {
-            auto vtx = boost::target(*outEdges.first, dag->graph);
-            if (this->idToClusterId[vtx] == -1) {
-                connected_vtxs.push_back(vtx);
-            }
-        }
-
-        for (auto& vtx: connected_vtxs) {
-            if (verticesHasSameConeIds(vtx, seed)) {
-                // Same cluster
-                _collect_cluster_worker(cluster_id, vtx);
-            }
-        }
-    }
-}
-
-
-
-void ClusterGraph::_collect_cones() {
-    BOOST_LOG_TRIVIAL(trace) << "Collect cones: Start";
+// ---------------------------------------------------------------------------
+// Phase A: Mark cones.
+//
+// For each sink in `dag->sinkNodes` (cone id = its index), BFS upstream over
+// valid predecessors exactly like the original `_collect_cones`, but instead
+// of materializing the cone's node list we only descend each visited vertex
+// one level deeper in the persistent cone-id trie.  After this pass every
+// vertex holds a pointer to the trie leaf whose path is its cone-id set.
+//
+// Cones are processed in strictly increasing cone-id order so the trie path
+// for any vertex is its canonical (sorted, unique) set of cone ids.  Vertices
+// sharing the same set of cones share the same leaf node.
+// ---------------------------------------------------------------------------
+void ClusterGraph::_mark_cones() {
+    BOOST_LOG_TRIVIAL(trace) << "Mark cones: Start";
     auto start = std::chrono::system_clock::now();
 
-    auto numVtxes = boost::num_vertices(dag->graph);
+    const auto numVtxes = boost::num_vertices(dag->graph);
+    const auto numSinks = dag->sinkNodes.size();
+    assert(numSinks > 0);
 
-    auto collect_cone_worker = [](const uint32_t seed, std::vector<uint32_t> &cone_node_vec, const RawGraph &graph) {
-        std::unordered_set<uint32_t> cone_nodes;
-        std::unordered_set<uint32_t> fringe, fringe_next;
+    coneTrie = std::make_unique<ConeTrie>();
+    vtxToNode.assign(numVtxes, coneTrie->root());
 
-        cone_nodes.reserve(1024);
-        fringe.reserve(128);
-        fringe_next.reserve(128);
+    std::unordered_set<uint32_t> coneVisited;
+    std::vector<uint32_t> fringe;
+    std::vector<uint32_t> fringeNext;
 
-        fringe.insert(seed);
+    // Cones are processed in strictly increasing cone-id order, so each
+    // vertex's root-to-leaf trie path is its canonical (sorted, unique)
+    // cone-id set.  See the ordering invariant in include/cone_trie.h.
+    // Do not parallelize this loop without re-establishing that invariant.
+    for (uint32_t cone_id = 0; cone_id < numSinks; ++cone_id) {
+        const uint32_t seed = dag->sinkNodes[cone_id];
 
+        coneVisited.clear();
+        fringe.clear();
 
-        while(!fringe.empty()) {
-            fringe_next.clear();
-            for (auto vtx: fringe) {
-                if (!cone_nodes.contains(vtx)) {
-                    cone_nodes.insert(vtx);
+        coneVisited.insert(seed);
+        fringe.push_back(seed);
+        vtxToNode[seed] = coneTrie->visit(vtxToNode[seed], cone_id);
 
-                    for (auto inEdges = boost::in_edges(vtx, graph); inEdges.first != inEdges.second; inEdges.first++) {
-                        auto nid = boost::source(*inEdges.first, graph);
-                        if (graph[nid].valid) {
-                            fringe_next.insert(nid);
-                        }
-                    }      
+        while (!fringe.empty()) {
+            fringeNext.clear();
+            for (const auto vtx : fringe) {
+                for (auto inEdges = boost::in_edges(vtx, dag->graph);
+                     inEdges.first != inEdges.second; ++inEdges.first) {
+                    const auto nid = static_cast<uint32_t>(boost::source(*inEdges.first, dag->graph));
+                    if (!dag->graph[nid].valid) continue;
+                    if (coneVisited.insert(nid).second) {
+                        vtxToNode[nid] = coneTrie->visit(vtxToNode[nid], cone_id);
+                        fringeNext.push_back(nid);
+                    }
                 }
             }
-
-            std::swap(fringe, fringe_next);
+            std::swap(fringe, fringeNext);
         }
-
-        cone_node_vec.reserve(cone_nodes.size());
-        cone_node_vec.assign(cone_nodes.begin(), cone_nodes.end());
-    };
-
-
-
-
-    std::mutex write_back_lock;
-
-    auto numSinkVtxes = dag->sinkNodes.size();
-    assert(numSinkVtxes > 0);
-
-    cones_original_nodes.resize(numSinkVtxes);
-
-
-
-    const size_t chunk_size = 1000;
-    std::atomic<size_t> next_index(0);
-    std::vector<std::thread> threads;
-
-    for (size_t t = 0; t < parallel_threads; ++t) {
-
-        threads.emplace_back([&] {
-            std::vector<std::vector<uint32_t>> results;
-            results.resize(chunk_size);
-
-            while (true) {
-                size_t i = next_index.fetch_add(1);
-
-                size_t start = i * chunk_size;
-                size_t end = std::min(start + chunk_size, numSinkVtxes);
-
-                if (start >= end) return;
-
-                for (auto j = start; j < end; j++) {
-                    auto seed = dag->sinkNodes.at(j);
-                    auto result_i = j - start;
-                    assert(result_i < chunk_size);
-                    assert(results[result_i].size() == 0);
-                    collect_cone_worker(seed, results[result_i], dag->graph);
-                    assert(results[result_i].size() > 0);
-                }
-
-                write_back_lock.lock();
-                for (auto j = start; j < end; j++) {
-                    std::swap(cones_original_nodes[j], results[j - start]);
-                }
-                write_back_lock.unlock();
-            }
-        });
     }
-
-    for (auto& t : threads) t.join();
-
-    assert(cones_original_nodes.size() == dag->sinkNodes.size());
-
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(trace) << "Collect cones: Done in " << time_ms << "ms";
+    BOOST_LOG_TRIVIAL(trace) << "Mark cones: Done in " << duration.count() << "ms"
+                             << " (trie nodes = " << coneTrie->nodeCount() << ")";
 }
 
-
-//// Util function that simply add all coneId in a cone to vtxId
-void ClusterGraph::insertConeIds(uint32_t coneId, const std::vector<uint32_t> &cone) {
-    std::unordered_set<uint32_t> coneVtxStorageIds;
-    std::unordered_map<uint32_t, uint32_t> coneVtxStorageIdOldToNew;
-    std::unordered_map<uint32_t, uint32_t> coneVtxStorageIdUserCount;
-    for (auto vtx: cone) {
-        auto vtxConeIdStorage = idToConeIdStorage[vtx];
-        coneVtxStorageIds.insert(vtxConeIdStorage);
-        if (!coneVtxStorageIdUserCount.contains(vtxConeIdStorage)) {
-            coneVtxStorageIdUserCount[vtxConeIdStorage] = 0;
-        }
-        coneVtxStorageIdUserCount[vtxConeIdStorage]++;
-    }
-    // create new cone id set
-    for (const auto &ei: coneVtxStorageIds) {
-        if (coneVtxStorageIdUserCount[ei] != idToConeIdsReferenceCount[ei]) {
-            // need copy
-            assert(!coneIdsStorage.contains(nextStorageId));
-            coneIdsStorage[nextStorageId] = coneIdsStorage[ei];
-            coneIdsStorage[nextStorageId].insert(coneId);
-            coneVtxStorageIdOldToNew[ei] = nextStorageId;
-            nextStorageId++;
-        } else {
-            // No copy needed
-            coneIdsStorage[ei].insert(coneId);
-            coneVtxStorageIdOldToNew[ei] = ei;
-        }
-
-    }
-    for (auto vtx: cone) {
-        auto oldPtr = idToConeIdStorage[vtx];
-        auto newPtr = coneVtxStorageIdOldToNew[oldPtr];
-        if (oldPtr != newPtr) {
-            idToConeIdStorage[vtx] = newPtr;
-            // update reference count
-            assert(idToConeIdsReferenceCount[oldPtr] != 0);
-            idToConeIdsReferenceCount[oldPtr] -= 1;
-            idToConeIdsReferenceCount[newPtr] += 1;
-        }
-
-    }
-    // release unused
-    for (const auto &ei: coneVtxStorageIds) {
-        if (idToConeIdsReferenceCount[ei] == 0) {
-            // can be removed
-            coneIdsStorage.erase(ei);
-            idToConeIdsReferenceCount.erase(ei);
-        }
-    }
-}
-std::unordered_set<uint32_t>& ClusterGraph::getConeIds(uint32_t vtxId) {
-    return coneIdsStorage[idToConeIdStorage[vtxId]];
-}
-bool ClusterGraph::verticesHasSameConeIds(uint32_t vtx1, uint32_t vtx2) {
-    auto storageId1 = idToConeIdStorage[vtx1];
-    auto storageId2 = idToConeIdStorage[vtx2];
-    auto ret = storageId1 == storageId2;
-//    auto ret2 = coneIdsStorage[storageId1] == coneIdsStorage[storageId2];
-//    assert(ret == ret2);
-    return ret;
-}
-
-
-
+// ---------------------------------------------------------------------------
+// Phase B: Collect clusters.
+//
+// A cluster is a connected component (using both in- and out-edges) within
+// the subgraph induced on vertices that share the same trie leaf, i.e. the
+// same cone-id set.  This reproduces the original connectivity-based
+// clustering (a strict "group-by identical cone-id set" would collapse
+// disconnected components that happen to share a set).
+//
+// Cluster ids are assigned so that the first `numSinks` ids correspond to
+// the connected components containing sink 0, sink 1, ... in `dag->sinkNodes`
+// order.  This preserves the cone_id == cluster_id invariant relied upon by
+// hyper_graph.cpp.  Remaining clusters are numbered in increasing lowest
+// unassigned vertex-id order, matching the original residual scan.
+// ---------------------------------------------------------------------------
 void ClusterGraph::_collect_clusters() {
     BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Start";
     auto start = std::chrono::system_clock::now();
 
-    // mark cone id
-    auto dagNumVtxes = boost::num_vertices(dag->graph);
+    const auto numVtxes = boost::num_vertices(dag->graph);
+    const auto numSinks = dag->sinkNodes.size();
 
-    coneIdsStorage[0] = {};
-    idToConeIdStorage.resize(dagNumVtxes, 0);
-    idToConeIdsReferenceCount[0] = dagNumVtxes;
-    auto numCones = this->cones_original_nodes.size();
-
-    for (uint32_t cid = 0; cid < numCones; cid++) {
-        insertConeIds(cid, this->cones_original_nodes[cid]);
-
-    }
-
-    // init this->idToClusterId
-    // -1: unvisited
-    // -2 invalid
-    this->idToClusterId.assign(dagNumVtxes, -1);
-
-    for (uint32_t nid = 0; nid < dagNumVtxes; nid++) {
-        if (!(dag->graph[nid].valid)) {
-            this->idToClusterId[nid] = -2;
+    idToClusterId.assign(numVtxes, -1);
+    for (uint32_t nid = 0; nid < numVtxes; ++nid) {
+        if (!dag->graph[nid].valid) {
+            idToClusterId[nid] = -2;
         }
     }
 
-    // First, collect all clusters for all sink nodes
-    for (auto& sink_vtx: dag->sinkNodes) {
-        // starts from 0
-        uint32_t cluster_id = this->clusters.size();
-        if (cluster_id >= INT32_MAX) {
-            BOOST_LOG_TRIVIAL(fatal) << "Cluster id too large";
-            exit(-1);
+    // Iterative flood fill restricted to neighbors pointing at the same trie
+    // leaf as the seed.  Original code used recursion; we use an explicit
+    // stack so deeply nested netlists cannot overflow the call stack.
+    auto floodFill = [&](uint32_t seed, uint32_t cluster_id) {
+        auto& cluster = this->clusters[cluster_id];
+        std::vector<uint32_t> stk;
+        stk.reserve(64);
+
+        assert(idToClusterId[seed] == -1);
+        idToClusterId[seed] = static_cast<int32_t>(cluster_id);
+        cluster.push_back(seed);
+        stk.push_back(seed);
+
+        while (!stk.empty()) {
+            const uint32_t u = stk.back();
+            stk.pop_back();
+            auto leaf = vtxToNode[u];
+
+            for (auto inEdges = boost::in_edges(u, dag->graph);
+                 inEdges.first != inEdges.second; ++inEdges.first) {
+                const auto w = static_cast<uint32_t>(boost::source(*inEdges.first, dag->graph));
+                if (idToClusterId[w] == -1 && vtxToNode[w] == leaf) {
+                    idToClusterId[w] = static_cast<int32_t>(cluster_id);
+                    cluster.push_back(w);
+                    stk.push_back(w);
+                }
+            }
+            for (auto outEdges = boost::out_edges(u, dag->graph);
+                 outEdges.first != outEdges.second; ++outEdges.first) {
+                const auto w = static_cast<uint32_t>(boost::target(*outEdges.first, dag->graph));
+                if (idToClusterId[w] == -1 && vtxToNode[w] == leaf) {
+                    idToClusterId[w] = static_cast<int32_t>(cluster_id);
+                    cluster.push_back(w);
+                    stk.push_back(w);
+                }
+            }
         }
-        this->clusters.emplace_back(std::vector<uint32_t>());
-        assert(cluster_id + 1 == this->clusters.size());
-        this->_collect_cluster_worker(cluster_id, sink_vtx);
+    };
+
+    // 1. Sink first, in sink order (preserves cone_id == cluster_id invariant).
+    for (uint32_t i = 0; i < numSinks; ++i) {
+        const uint32_t seed = dag->sinkNodes[i];
+        uint32_t cluster_id = static_cast<uint32_t>(clusters.size());
+        clusters.emplace_back();
+        floodFill(seed, cluster_id);
+        // First numSinks cluster ids are the sink clusters, by construction.
+        assert(cluster_id == i);
+        sinkNodes.push_back(cluster_id);
     }
 
-    // Collect clusters for all remaining nodes
-    assert(this->idToClusterId.size() == dagNumVtxes);
-    uint32_t cluster_seed = 0;
-    while (true) {
-        while ((this->idToClusterId[cluster_seed] != -1) && (cluster_seed < dagNumVtxes)) {
-            cluster_seed ++;
-        }
-
-        if (cluster_seed >= dagNumVtxes) {
-            break;
-        }
-
-        uint32_t cluster_id = this->clusters.size();
-        if (cluster_id >= INT32_MAX) {
-            BOOST_LOG_TRIVIAL(fatal) << "Cluster id too large";
-            exit(-1);
-        }
-        this->clusters.emplace_back(std::vector<uint32_t>());
-        this->_collect_cluster_worker(cluster_id, cluster_seed);
+    // 2. Remaining valid, unassigned vertices in vertex-id order.
+    for (uint32_t v = 0; v < numVtxes; ++v) {
+        if (idToClusterId[v] != -1) continue;
+        uint32_t cluster_id = static_cast<uint32_t>(clusters.size());
+        clusters.emplace_back();
+        floodFill(v, cluster_id);
     }
 
-
-    // It's guaranteed first nodes are sink nodes.
-    for (uint32_t sink_cluster_id = 0; sink_cluster_id < dag->sinkNodes.size(); sink_cluster_id++) {
-        this->sinkNodes.push_back(sink_cluster_id);
-    }
-
-    for (const auto& cluster: clusters) {
+    // Derive clusterIdToPins[cid] directly from the trie path of any vertex
+    // in the cluster (they are all equal by construction, sorted & unique).
+    clusterIdToPins.clear();
+    clusterIdToPins.reserve(clusters.size());
+    for (auto& cluster : clusters) {
         assert(!cluster.empty());
-        auto pins = getConeIds(cluster[0]);
-        assert(!pins.empty());
-        clusterIdToPins.push_back(pins);
+        auto leaf = vtxToNode[cluster.front()];
+        clusterIdToPins.push_back(coneTrie->pathConeIds(leaf));
     }
-//    idToConeId.clear();
-//    idToConeId.resize(0);
-    coneIdsStorage.clear();
-    coneIdsStorage.rehash(0);
-    idToConeIdsReferenceCount.clear();
-    idToConeIdsReferenceCount.rehash(0);
-    idToConeIdStorage.clear();
-    idToConeIdStorage.resize(0);
+
+    // Trie + per-vertex trie pointers are no longer needed downstream.
+    vtxToNode.clear();
+    vtxToNode.shrink_to_fit();
+    coneTrie.reset();
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Done in " << time_ms << "ms";
+    BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Done in " << duration.count() << "ms"
+                             << " (" << clusters.size() << " clusters)";
 }
 
 void ClusterGraph::_build_cluster_graph() {
@@ -396,24 +282,27 @@ void ClusterGraph::_update_cluster_weight() {
     BOOST_LOG_TRIVIAL(trace) << "Update cluster weight: Done in " << time_ms << "ms";
 }
 
+// ---------------------------------------------------------------------------
+// Phase C: Derive cones_cg_nodes without re-walking the original cones.
+//
+// For each cluster, `clusterIdToPins[cid]` is already the exact list of cone
+// ids that touch the cluster (its trie path).  `cones_cg_nodes[cone_id]` is
+// therefore the inverse mapping: for every (cluster, cone) pair implied by
+// the pins, append the cluster id to that cone's cluster list.  Each such
+// pair is enumerated exactly once, so no deduplication is needed (the trie
+// paths are unique sorted sequences).
+// ---------------------------------------------------------------------------
 void ClusterGraph::_update_cluster_cone() {
     BOOST_LOG_TRIVIAL(trace) << "Update cluster cones: Start";
     auto start = std::chrono::system_clock::now();
 
-    assert(!this->cones_original_nodes.empty());
-    assert(this->cones_cg_nodes.empty());
+    const auto numCones = dag->sinkNodes.size();
+    cones_cg_nodes.assign(numCones, {});
 
-    for (auto& cone: this->cones_original_nodes) {
-        std::unordered_set<uint32_t> cone_clusters;
-        for (auto& nid: cone) {
-            assert(dag->graph[nid].valid);
-            auto node_cluster_id = this->idToClusterId[nid];
-            assert(node_cluster_id >= 0);
-            cone_clusters.insert(node_cluster_id);
+    for (uint32_t cid = 0; cid < clusters.size(); ++cid) {
+        for (auto cone_id : clusterIdToPins[cid]) {
+            cones_cg_nodes[cone_id].push_back(cid);
         }
-        std::vector<uint32_t> cone_clusters_vec;
-        cone_clusters_vec.assign(cone_clusters.begin(), cone_clusters.end());
-        this->cones_cg_nodes.push_back(std::move(cone_clusters_vec));
     }
 
     auto stop = std::chrono::system_clock::now();
@@ -431,13 +320,10 @@ void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
     // 1. find sink vtxs
     // Already done in dag
 
-    // 2. collect cones
-    this->_collect_cones();
+    // 2. mark cones (build persistent cone-id trie + per-vertex pointers)
+    this->_mark_cones();
 
-    // v1: 2mega, 40:19s, 14253MB
-    // v2: 2mega, 22:39, 7335MB
-
-    // 3. collect clusters
+    // 3. collect clusters (connected components within same-leaf groups)
     this->_collect_clusters();
 
     // 4. build cluster graph
@@ -456,7 +342,7 @@ void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
 }
 
 void ClusterGraph::constructParts(const int nparts, const std::vector<uint32_t>& _coneIdToPartId) {
-    assert(_coneIdToPartId.size() == this -> cones_original_nodes.size());
+    assert(_coneIdToPartId.size() == this -> cones_cg_nodes.size());
     this -> coneIdToPartId = _coneIdToPartId;
     this -> partitions.clear();
     this -> partitions.assign(nparts, SBitSet());
@@ -517,4 +403,3 @@ PartitionStatistics* ClusterGraph::reportPartitionStatus() {
 
     return ret;
 }
-

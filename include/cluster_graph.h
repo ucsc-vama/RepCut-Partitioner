@@ -11,40 +11,32 @@
 #include "SBitSet.h"
 
 #include "partition_stat.h"
+#include "cone_trie.h"
+
 #include <memory>
 
 namespace repcut {
     class ClusterGraph {
     private:
-        void _collect_cluster_worker(uint32_t cluster_id, uint32_t seed);
-
-        void _collect_cones();
+        // Build the persistent cone-id trie and per-vertex trie pointers.
+        // Replaces the old `_collect_cones` materialization of cones.
+        void _mark_cones();
         void _collect_clusters();
-
         void _build_cluster_graph();
         void _update_cluster_weight();
-
         void _update_cluster_cone();
 
+        // Persistent trie mapping each vertex to the leaf whose root-to-leaf
+        // path is its (sorted, unique) cone-id set.  Vertices belonging to the
+        // same set of cones share a leaf, so set equality is pointer equality.
+        std::unique_ptr<ConeTrie> coneTrie;
+        std::vector<ConeTrie::Node*> vtxToNode;
 
-        // Two level storage to reduce memory needs
-        // idToConeIds stores real set of cone ids
-        // while idToConeIdStorage keeps index to idToConeIds
-        std::unordered_map<uint32_t, std::unordered_set<uint32_t>> coneIdsStorage;
-        std::unordered_map<uint32_t, uint32_t> idToConeIdsReferenceCount;
-        std::vector<uint32_t> idToConeIdStorage;
-        uint32_t nextStorageId = 1;
-        // Util function that simply add all coneId in a cone to vtxId
-        void insertConeIds(uint32_t coneId, const std::vector<uint32_t> &cone);
-        std::unordered_set<uint32_t>& getConeIds(uint32_t vtxId);
-        bool verticesHasSameConeIds(uint32_t vtx1, uint32_t vtx2);
     public:
         RawGraph graph;
         std::vector<uint32_t> sinkNodes;
 
-        // Cone nodes in Stmt DAG
-        std::vector<std::vector<uint32_t>> cones_original_nodes;
-        // Cone nodes in Cluster Graph
+        // Cone nodes in Cluster Graph (original cones are not retained).
         std::vector<std::vector<uint32_t>> cones_cg_nodes;
         // Clusters should be non-overlapping
         std::vector<std::vector<uint32_t>> clusters;
@@ -53,14 +45,15 @@ namespace repcut {
         // -2 invalid
         std::vector<int32_t> idToClusterId;
 
-
-
         std::vector<SBitSet> partitions;
         std::vector<uint32_t> coneIdToPartId;
 
         DirectedAcyclicGraph* dag = nullptr;
 
-        std::vector<std::unordered_set<uint32_t>> clusterIdToPins;
+        // Pins per cluster: the (sorted, unique) set of cone ids touching the
+        // cluster.  Stored as a sorted vector of cone ids (derived from the
+        // trie path), which is more compact than an unordered_set.
+        std::vector<std::vector<uint32_t>> clusterIdToPins;
 
         // Cluster weight:
         // std::vector<uint32_t> weight;
