@@ -13,7 +13,6 @@ target_sources(
     cone_trie.cpp
     dag.cpp
     rcp_util.cpp
-    reconstructor.cpp 
     rep_cut_partitioner.cpp 
     )
 

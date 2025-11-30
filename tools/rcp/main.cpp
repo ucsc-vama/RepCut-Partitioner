@@ -2,9 +2,7 @@
 
 #include "commandline_options.h"
 #include "dag.h"
-#include "cluster_graph.h"
 #include "rep_cut_partitioner.h"
-#include "reconstructor.h"
 
 #include <boost/log/utility/setup/console.hpp>
 
@@ -84,58 +82,29 @@ int main(int argc, char** argv) {
     // Find all sink Vtxs
     input_dag->findSinkNodes();
 
-    BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
-    auto* cluster_graph = new ClusterGraph();
-    cluster_graph->parallel_threads = opts.parallel_threads;
-    cluster_graph->collapseFromDAG(input_dag);
-
-    PrintMemoryUsage();
-
-
-    BOOST_LOG_TRIVIAL(info) << "Write hMetis file";
-    const fs::path hmetis_path = opts.work_directory / "parts.hmetis";
-    cluster_graph->writeHMetisFile(hmetis_path.c_str());
-
-    // Cluster graph is no longer needed once the hMetis file is written.
-    // Free it before the MtKaHyPar call and reconstruction to cut peak
-    // memory during those phases.
-    delete cluster_graph;
-    cluster_graph = nullptr;
-
-    PrintMemoryUsage();
-
     BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
     auto* rcp = new RepCutPartitioner();
     rcp -> kahypar_imbalance_factor = opts.target_ib;
-    rcp -> hmetis_path = hmetis_path;
-    rcp -> set_work_directory(opts.work_directory);
+    rcp -> cluster_parallel_threads = opts.parallel_threads;
     rcp -> parallel_threads = opts.parallel_threads;
-    rcp -> partition(opts.nparts);
+    rcp -> set_work_directory(opts.work_directory);
+    rcp -> partition(input_dag, opts.nparts);
 
     PrintMemoryUsage();
 
-    BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
-
-    auto reconstructor = new Reconstructor();
-    reconstructor -> set_work_directory(opts.work_directory);
-    reconstructor -> construct(opts.nparts, input_dag, rcp -> coneIdToPartId);
-
-    PrintMemoryUsage();
-
-    auto stat = reconstructor -> reportPartitionStatus(input_dag);
+    auto stat = rcp -> reportPartitionStatus(input_dag);
     stat -> print_stat();
     delete stat;
 
     PrintMemoryUsage();
 
     BOOST_LOG_TRIVIAL(info) << "Writing to output file";
-    reconstructor -> saveToFile("rcp_output.txt");
+    rcp -> saveToFile("rcp_output.txt");
 
     PrintMemoryUsage();
 
     std::cout << "Done" << std::endl;
 
-    delete reconstructor;
     delete rcp;
     delete input_dag;
 

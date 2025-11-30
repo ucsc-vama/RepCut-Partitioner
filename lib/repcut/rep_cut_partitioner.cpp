@@ -4,19 +4,39 @@
 
 #include "rep_cut_partitioner.h"
 
+#include "cluster_graph.h"
+
+#include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <fstream>
 #include <iostream>
-#include <boost/format.hpp>
-#include <boost/algorithm/string.hpp>
-#include <string>
 #include <sstream>
+#include <string>
+#include <unordered_set>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/format.hpp>
 
 #include "process.hpp"
 
 using namespace repcut;
 
 
+// Build the cluster graph from the design DAG and stream it to an hMetis
+// file.  The cluster graph is freed before returning so its memory does not
+// overlap with the MtKaHyPar call or the reconstruction pass.
+void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph* dag) {
+    BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
+    auto* cluster_graph = new ClusterGraph();
+    cluster_graph->parallel_threads = cluster_parallel_threads;
+    cluster_graph->collapseFromDAG(dag);
+
+    hmetis_path = fs::path(work_directory) / "parts.hmetis";
+    cluster_graph->writeHMetisFile(hmetis_path.c_str());
+
+    delete cluster_graph;
+}
 
 void RepCutPartitioner::_callMtKaHyPar() {
     BOOST_LOG_TRIVIAL(info) << "Call MtKaHyPar";
@@ -61,7 +81,7 @@ void RepCutPartitioner::_callMtKaHyPar() {
 
 
 void RepCutPartitioner::_parseKaHyParResult() {
-    auto kahypar_output_fullpath = work_directory / this -> mtkahypar_output_filename;
+    auto kahypar_output_fullpath = fs::path(work_directory) / this -> mtkahypar_output_filename;
 
     auto file_status = fs::status(kahypar_output_fullpath);
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
@@ -89,28 +109,175 @@ void RepCutPartitioner::_parseKaHyParResult() {
     }
 }
 
-void RepCutPartitioner::partition(const int nparts) {
-    BOOST_LOG_TRIVIAL(trace) << "RepCut Partitioner: Start";
+// Reconstruct per-partition DAG node sets by BFS upstream from each sink
+// assigned to a partition.  A non-sink cluster touches cone c iff its nodes
+// are ancestors of sink(c), so {ancestors of sink(c) : coneIdToPartId[c] == pid}
+// is the set of nodes partition pid must simulate (replicated nodes appear
+// in multiple partitions exactly when their descendant cones span parts).
+//
+// `vis` (per-partition unordered_set) serves as both the BFS visited marker
+// and the dedup container; reused across partitions via clear().
+void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph* dag) {
+    BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
+    auto start = std::chrono::system_clock::now();
+
+    assert(dag != nullptr);
+    assert(coneIdToPartId.size() == dag->sinkNodes.size());
+
+    partitions.clear();
+    partitions.assign(desired_parts, std::vector<uint32_t>());
+
+    std::unordered_set<uint32_t> vis;
+    std::vector<uint32_t> fringe;
+    std::vector<uint32_t> sinksForPart;
+    vis.reserve(1 << 14);
+    fringe.reserve(1 << 14);
+
+    for (uint32_t pid = 0; pid < desired_parts; ++pid) {
+        auto& part = partitions[pid];
+
+        sinksForPart.clear();
+        for (uint32_t cone_id = 0; cone_id < coneIdToPartId.size(); ++cone_id) {
+            if (coneIdToPartId[cone_id] == pid) {
+                sinksForPart.push_back(dag->sinkNodes[cone_id]);
+            }
+        }
+
+        vis.clear();
+        fringe.clear();
+        for (uint32_t s : sinksForPart) {
+            if (vis.insert(s).second) {
+                fringe.push_back(s);
+            }
+        }
+
+        while (!fringe.empty()) {
+            const uint32_t v = fringe.back();
+            fringe.pop_back();
+
+            // vis already contains v (we insert on push).  Skip invalid nodes
+            // but still keep them in vis so we don't re-traverse their edges.
+            if (!dag->graph[v].valid) continue;
+            part.push_back(v);
+
+            for (auto inEdges = boost::in_edges(v, dag->graph);
+                 inEdges.first != inEdges.second; ++inEdges.first) {
+                const auto u = static_cast<uint32_t>(boost::source(*inEdges.first, dag->graph));
+                if (vis.insert(u).second) {
+                    fringe.push_back(u);
+                }
+            }
+        }
+
+        // Match historical output order (ascending ids) so rcp_output.txt
+        // remains diffable against prior runs.
+        std::sort(part.begin(), part.end());
+    }
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    BOOST_LOG_TRIVIAL(info) << "Reconstruct: Done in " << duration.count() << "ms";
+}
+
+void RepCutPartitioner::partition(DirectedAcyclicGraph* dag, const int nparts) {
+    BOOST_LOG_TRIVIAL(info) << "RepCut Partitioner: Start";
     auto start = std::chrono::system_clock::now();
 
     this -> desired_parts = nparts;
+
+    // 1. Collapse DAG to cluster graph and write hMetis file (frees the
+    //    cluster graph before returning).
+    _buildAndWriteHmetis(dag);
+
+    // Output filename MtKaHyPar will produce.  Format must match what the
+    // MtKaHyPar binary writes for the given hmetis input.
     const std::string fmt_str = "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar";
     this -> mtkahypar_output_filename = (boost::format(fmt_str)
-                                                  % this -> hmetis_path.filename().string()
+                                                  % hmetis_path.filename().string()
                                                   % this -> desired_parts
                                                   % this -> kahypar_imbalance_factor
                                                   % this -> kahypar_seed).str();
 
+    // 2. Call MtKaHyPar on the written hMetis file.
+    _callMtKaHyPar();
 
-    // Call mtKaHyPar
-    this -> _callMtKaHyPar();
+    // 3. Parse MtKaHyPar's output into coneIdToPartId / partIdToConeId.
+    _parseKaHyParResult();
 
-    this -> _parseKaHyParResult();
-
+    // 4. Reconstruct per-partition DAG node sets (upstream BFS).
+    _reconstruct(dag);
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(trace) << "RepCut Partitioner: Done in " << time_ms << "ms";
+    BOOST_LOG_TRIVIAL(info) << "RepCut Partitioner: Done in " << time_ms << "ms";
 }
 
+PartitionStatistics* RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph* dag) {
+    assert(!this->partitions.empty());
+
+    auto ret = new PartitionStatistics();
+    ret->nparts = this->partitions.size();
+
+    // Whole-design totals (only valid nodes).
+    for (auto vtxes = boost::vertices(dag->graph); vtxes.first != vtxes.second; ++vtxes.first) {
+        const auto v = *vtxes.first;
+        if (dag->graph[v].valid) {
+            ret->sg_size++;
+            ret->sg_weight += dag->graph[v].weight;
+        }
+    }
+
+    uint32_t total_part_size = 0;
+    float total_part_weight = 0;
+
+    for (auto& part : this->partitions) {
+        uint32_t part_size = 0;
+        float part_weight = 0;
+
+        for (auto& nid : part) {
+            if (dag->graph[nid].valid) {
+                part_size += 1;
+                part_weight += dag->graph[nid].weight;
+            }
+        }
+
+        total_part_size += part_size;
+        total_part_weight += part_weight;
+
+        ret->partition_size.push_back(part_size);
+        ret->partition_weights.push_back(part_weight);
+    }
+
+    ret->total_part_size = total_part_size;
+    ret->replication_size = ret->total_part_size - ret->sg_size;
+    ret->replication_rate_size = static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size;
+    ret->ib_factor_size = calculate_ib_factor(ret->partition_size);
+
+    ret->total_part_weight = total_part_weight;
+    ret->replication_weight = ret->total_part_weight - ret->sg_weight;
+    ret->replication_rate_weight = static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight;
+    ret->ib_factor_weight = calculate_ib_factor(ret->partition_weights);
+
+    return ret;
+}
+
+void RepCutPartitioner::saveToFile(const char* filename) {
+    BOOST_LOG_TRIVIAL(info) << "Write to output file: Start";
+    auto start = std::chrono::system_clock::now();
+
+    auto ofs = std::ofstream(work_directory + "/" + filename);
+
+    for (uint32_t pid = 0; pid < partitions.size(); pid++) {
+        for (auto& sg_id : this->partitions[pid]) {
+            ofs << sg_id << ',';
+        }
+        ofs << "\n";
+    }
+
+    ofs.close();
+
+    auto stop = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
+    BOOST_LOG_TRIVIAL(info) << "Write to output file: Done in " << duration.count() << "ms";
+}

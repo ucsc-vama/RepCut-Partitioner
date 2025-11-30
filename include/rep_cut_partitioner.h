@@ -6,35 +6,55 @@
 #define RCP_REP_CUT_PARTITIONER_H
 
 #include "rcp_common.h"
+#include "dag.h"
+#include "rcp_util.h"
 
 namespace repcut {
     class RepCutPartitioner {
     private:
+        void _buildAndWriteHmetis(DirectedAcyclicGraph* dag);
         void _callMtKaHyPar();
         void _parseKaHyParResult();
-    public:
-        // Path to the pre-written hMetis-format input file.  The caller is
-        // responsible for writing it (e.g. ClusterGraph::writeHMetisFile)
-        // before invoking partition().
+        void _reconstruct(DirectedAcyclicGraph* dag);
+
+        // hmetis file path (written by _buildAndWriteHmetis, read by _callMtKaHyPar).
         fs::path hmetis_path;
+        // Output filename produced by MtKaHyPar.
         fs::path mtkahypar_output_filename;
 
+    public:
+        // Parameters.
         std::string mtkahypar_cmd = "MtKaHyPar";
-
         float kahypar_imbalance_factor = 0.015;
         int32_t kahypar_seed = -1;
         uint32_t desired_parts = 0;
         int parallel_threads = -1;
+        uint32_t cluster_parallel_threads = 1;
 
-        // result
+        std::string work_directory;
+        void set_work_directory(const std::string& work_dir) {work_directory = work_dir;};
+
+        // Result: cone (sink) → partition id, as reported by MtKaHyPar.
         std::vector<uint32_t> coneIdToPartId;
         std::vector<std::vector<uint32_t>> partIdToConeId;
 
-        std::string work_directory;
+        // Result: per-partition sets of DAG node ids that the partition must
+        // simulate (replicated ancestors included).  Sorted ascending.
+        std::vector<std::vector<uint32_t>> partitions;
 
-        void set_work_directory(const std::string& work_dir) {work_directory = work_dir;};
+        // Single high-level entry point: take a design DAG and a target
+        // partition count, run the full RepCut pipeline (collapse to cluster
+        // graph, write hMetis, call MtKaHyPar, parse result, reconstruct
+        // per-partition DAG node sets via upstream BFS).  Fills `partitions`
+        // and `coneIdToPartId`.
+        void partition(DirectedAcyclicGraph* dag, const int nparts);
 
-        void partition(const int nparts);
+        // Compute statistics over `partitions` against the design DAG.
+        PartitionStatistics* reportPartitionStatus(DirectedAcyclicGraph* dag);
+
+        // Write `partitions` (one comma-separated line of DAG node ids per
+        // partition) to `${work_directory}/${filename}`.
+        void saveToFile(const char* filename);
     };
 }
 
