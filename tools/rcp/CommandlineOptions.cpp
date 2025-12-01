@@ -16,7 +16,7 @@ bool parse_commandline_options(int argc, char** argv) {
             ("work_directory", po::value<std::string>(), "Working directory")
             ("log_level", po::value<std::string>(), "log level")
             ("target_ib", po::value<float>() ->default_value(0.03f), "target imbalance factor, default 0.03")
-            ("threads", po::value<int>(), "parallel threads pass to MtKaHyPar")
+            ("threads", po::value<int>(), "parallel threads pass to MtKaHyPar (only --threads 1 is deterministic)")
             ("seed", po::value<int>(), "seed pass to MtKaHyPar (-1 = MtKaHyPar default)")
             ;
 
