@@ -5,9 +5,8 @@
 #include "RepCutPartitioner.h"
 
 #include "ClusterGraph.h"
+#include "Log.h"
 #include "StringUtils.h"
-
-#include <boost/log/trivial.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -32,9 +31,10 @@ using namespace repcut;
 // returning so its memory does not overlap with the MtKaHyPar call or the
 // reconstruction pass.
 void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag) {
-    BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
     ClusterGraph cluster_graph;
     cluster_graph.parallel_threads = cluster_parallel_threads;
+    cluster_graph.log_level = log_level;
     cluster_graph.collapseFromDAG(dag);
 
     hmetis_path = fs::path(work_directory) / "parts.hmetis";
@@ -42,7 +42,7 @@ void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag) {
 }
 
 void RepCutPartitioner::_callMtKaHyPar() {
-    BOOST_LOG_TRIVIAL(info) << "Call MtKaHyPar";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Call MtKaHyPar\n");
     assert(this->parallel_threads > 0);
 
     std::vector<std::string> args;
@@ -71,13 +71,13 @@ void RepCutPartitioner::_callMtKaHyPar() {
     for (const auto &s: args) {
         oss << s << " ";
     }
-    BOOST_LOG_TRIVIAL(info) << "MtKaHyPar cmd: " << oss.str() << "\n";
+    rcp_log(log_level, REPCUT_LOG_INFO, "MtKaHyPar cmd: %s\n", oss.str().c_str());
 
     TinyProcessLib::Process kahypar_process(args, "");
     auto ret_code = kahypar_process.get_exit_status();
 
     if (ret_code != 0) {
-        BOOST_LOG_TRIVIAL(fatal) << "MtKaHyPar returns non-zero code: " << ret_code;
+        rcp_log(log_level, REPCUT_LOG_ERROR, "MtKaHyPar returns non-zero code: %d\n", ret_code);
         exit(-1);
     }
 }
@@ -88,7 +88,9 @@ void RepCutPartitioner::_parseKaHyParResult() {
 
     auto file_status = fs::status(kahypar_output_fullpath);
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
-        BOOST_LOG_TRIVIAL(fatal) << "KaHyPar result file " << kahypar_output_fullpath << " does not exist or is not a regular file!";
+        rcp_log(log_level, REPCUT_LOG_ERROR,
+                 "KaHyPar result file %s does not exist or is not a regular file!\n",
+                 kahypar_output_fullpath.c_str());
         exit(-1);
     }
 
@@ -104,7 +106,7 @@ void RepCutPartitioner::_parseKaHyParResult() {
         TokenView tv(line);
         auto tok = tv.next();
         if (tok.empty()) {
-            BOOST_LOG_TRIVIAL(fatal) << "Empty partition id at line " << lineno;
+            rcp_log(log_level, REPCUT_LOG_ERROR, "Empty partition id at line %u\n", lineno);
             exit(-1);
         }
         std::string buf(tok);  // strtol needs NUL-terminated
@@ -112,7 +114,9 @@ void RepCutPartitioner::_parseKaHyParResult() {
         errno = 0;
         long pid_long = std::strtol(buf.c_str(), &end, 10);
         if (errno != 0 || end == buf.c_str() || *end != '\0') {
-            BOOST_LOG_TRIVIAL(fatal) << "Invalid partition id at line " << lineno << ": '" << tok << "'";
+            rcp_log(log_level, REPCUT_LOG_ERROR,
+                     "Invalid partition id at line %u: '%.*s'\n",
+                     lineno, static_cast<int>(tok.size()), tok.data());
             exit(-1);
         }
         int32_t pid = static_cast<int32_t>(pid_long);
@@ -134,7 +138,7 @@ void RepCutPartitioner::_parseKaHyParResult() {
 // `vis` (per-partition unordered_set) serves as both the BFS visited marker
 // and the dedup container; reused across partitions via clear().
 void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
-    BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Reconstruct partitions\n");
     auto start = std::chrono::system_clock::now();
 
     assert(coneIdToPartId.size() == dag.sinkNodes.size());
@@ -189,11 +193,11 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    BOOST_LOG_TRIVIAL(info) << "Reconstruct: Done in " << duration.count() << "ms";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Reconstruct: Done in %llums\n", duration.count());
 }
 
 void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts) {
-    BOOST_LOG_TRIVIAL(info) << "RepCut Partitioner: Start";
+    rcp_log(log_level, REPCUT_LOG_INFO, "RepCut Partitioner: Start\n");
     auto start = std::chrono::system_clock::now();
 
     this -> desired_parts = nparts;
@@ -226,7 +230,7 @@ void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts) {
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(info) << "RepCut Partitioner: Done in " << time_ms << "ms";
+    rcp_log(log_level, REPCUT_LOG_INFO, "RepCut Partitioner: Done in %llums\n", time_ms);
 }
 
 std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph& dag) {
@@ -279,7 +283,7 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
 }
 
 void RepCutPartitioner::saveToFile(const char* filename) {
-    BOOST_LOG_TRIVIAL(info) << "Write to output file: Start";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Write to output file: Start\n");
     auto start = std::chrono::system_clock::now();
 
     auto ofs = std::ofstream(work_directory + "/" + filename);
@@ -295,5 +299,5 @@ void RepCutPartitioner::saveToFile(const char* filename) {
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    BOOST_LOG_TRIVIAL(info) << "Write to output file: Done in " << duration.count() << "ms";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Write to output file: Done in %llums\n", duration.count());
 }

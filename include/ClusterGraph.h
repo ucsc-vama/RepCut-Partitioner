@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "DAG.h"
+#include "repcut.h"
 
 #include "ConeTrie.h"
 
@@ -65,6 +66,9 @@ namespace repcut {
         std::vector<float> nodeWeight;
 
         uint32_t parallel_threads = 1;
+
+        // Log threshold carried from RepCutContext.
+        RepCutLogLevel log_level = REPCUT_LOG_SILENT;
 
         void collapseFromDAG(const DirectedAcyclicGraph& dag);
 

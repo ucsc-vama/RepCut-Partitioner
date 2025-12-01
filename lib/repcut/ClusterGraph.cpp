@@ -4,6 +4,7 @@
 
 #include "ClusterGraph.h"
 #include "ConeTrie.h"
+#include "Log.h"
 
 #include <algorithm>
 #include <cassert>
@@ -13,8 +14,6 @@
 #include <numeric>
 #include <unordered_set>
 #include <vector>
-
-#include <boost/log/trivial.hpp>
 
 using namespace repcut;
 
@@ -32,7 +31,7 @@ using namespace repcut;
 // sharing the same set of cones share the same leaf node.
 // ---------------------------------------------------------------------------
 void ClusterGraph::_mark_cones() {
-    BOOST_LOG_TRIVIAL(trace) << "Mark cones: Start";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Mark cones: Start\n");
     auto start = std::chrono::system_clock::now();
 
     const auto numVtxes = dag->numVertices();
@@ -77,8 +76,8 @@ void ClusterGraph::_mark_cones() {
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    BOOST_LOG_TRIVIAL(trace) << "Mark cones: Done in " << duration.count() << "ms"
-                             << " (trie nodes = " << coneTrie->nodeCount() << ")";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Mark cones: Done in %llums (trie nodes = %zu)\n",
+             duration.count(), coneTrie->nodeCount());
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +98,7 @@ void ClusterGraph::_mark_cones() {
 // increasing lowest-unassigned vertex-id order.
 // ---------------------------------------------------------------------------
 void ClusterGraph::_collect_clusters() {
-    BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Start";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Collect clusters: Start\n");
     auto start = std::chrono::system_clock::now();
 
     const auto numVtxes = dag->numVertices();
@@ -183,15 +182,15 @@ void ClusterGraph::_collect_clusters() {
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    BOOST_LOG_TRIVIAL(trace) << "Collect clusters: Done in " << duration.count() << "ms"
-                             << " (" << clusters.size() << " clusters)";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Collect clusters: Done in %llums (%zu clusters)\n",
+             duration.count(), clusters.size());
 }
 
 // Cluster weight = 1 + sum of valid member weights.  The +1 floor keeps
 // KaHyPar happy since it does not accept weight 0.  Replaces the former
 // bundled-property write on the boost adjacency_list.
 void ClusterGraph::_update_cluster_weight() {
-    BOOST_LOG_TRIVIAL(trace) << "Update cluster weight: Start";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster weight: Start\n");
     auto start = std::chrono::system_clock::now();
 
     const auto numClusters = clusters.size();
@@ -210,7 +209,7 @@ void ClusterGraph::_update_cluster_weight() {
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    BOOST_LOG_TRIVIAL(trace) << "Update cluster weight: Done in " << duration.count() << "ms";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster weight: Done in %llums\n", duration.count());
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +223,7 @@ void ClusterGraph::_update_cluster_weight() {
 // paths are unique sorted sequences).
 // ---------------------------------------------------------------------------
 void ClusterGraph::_update_cluster_cone() {
-    BOOST_LOG_TRIVIAL(trace) << "Update cluster cones: Start";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster cones: Start\n");
     auto start = std::chrono::system_clock::now();
 
     const auto numCones = dag->sinkNodes.size();
@@ -239,12 +238,12 @@ void ClusterGraph::_update_cluster_cone() {
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(trace) << "Update cluster cones: Done in " << time_ms << "ms";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster cones: Done in %llums\n", time_ms);
 }
 
 
 void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph &dag) {
-    BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Start";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Collapse cluster graph: Start\n");
     auto start = std::chrono::system_clock::now();
 
     this -> dag = &dag;
@@ -265,7 +264,7 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph &dag) {
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
-    BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Done in " << time_ms << "ms";
+    rcp_log(log_level, REPCUT_LOG_INFO, "Collapse cluster graph: Done in %llums\n", time_ms);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +279,7 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph &dag) {
 // by that cluster's pin count).
 // ---------------------------------------------------------------------------
 void ClusterGraph::writeHMetisFile(const char* filename) {
-    BOOST_LOG_TRIVIAL(trace) << "Write to hMetis graph file: Start";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Write to hMetis graph file: Start\n");
     auto start = std::chrono::system_clock::now();
 
     const auto numCones = dag->sinkNodes.size();
@@ -335,5 +334,5 @@ void ClusterGraph::writeHMetisFile(const char* filename) {
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    BOOST_LOG_TRIVIAL(trace) << "Write to hMetis graph file: Done in " << duration.count() << "ms";
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Write to hMetis graph file: Done in %llums\n", duration.count());
 }

@@ -1,111 +1,41 @@
-#include <iostream>
-
 #include "CommandlineOptions.h"
-#include "DAG.h"
-#include "RepCutPartitioner.h"
+#include "repcut.h"
 
-#include <memory>
-
-#include <boost/log/utility/setup/console.hpp>
-
-using namespace repcut;
-
-
+#include <cstdio>
 #include <iostream>
-#include <fstream>
-#include <string>
-#include <unistd.h>
-#include <sys/resource.h>
-
-#ifdef __APPLE__
-#include <mach/mach.h>
-#endif
-
-size_t get_current_rss() {
-    // Linux
-#if defined(__linux__) || defined(__linux) || defined(linux)
-    long rss = 0;
-    std::ifstream statm("/proc/self/statm");
-    if (statm) {
-        size_t total, resident, shared, text, lib, data, dirty;
-        statm >> total >> resident >> shared >> text >> lib >> data >> dirty;
-        long page_size = sysconf(_SC_PAGESIZE);
-        rss = resident * page_size;
-    }
-    return rss;
-
-    // macOS 
-#elif defined(__APPLE__)
-    mach_task_basic_info info;
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, 
-                 (task_info_t)&info, &count) == KERN_SUCCESS) {
-        return info.resident_size;
-    }
-    return 0;
-
-#else
-    return 0; // Not supported
-#endif
-}
-
-void PrintMemoryUsage() {
-    size_t rss = get_current_rss();
-    std::cout << "Current memory usage: " 
-              << rss / (1024 * 1024) << " MB)\n";
-}
-
-
+#include <algorithm>
 
 int main(int argc, char** argv) {
-    boost::log::add_console_log(std::cout, boost::log::keywords::format = ">> %Message%");
-    boost::log::core::get()->set_filter (
-            boost::log::trivial::severity >= boost::log::trivial::warning
-    );
-
     if (!parse_commandline_options(argc, argv)) {
-        // Some commandline options are illegal
-        exit(-1);
+        return 1;
     }
-    // set log level
-    auto boost_log_level = log_levels[opts.log_level];
-    boost::log::core::get()->set_filter (
-            boost::log::trivial::severity >= boost_log_level
-    );
-    BOOST_LOG_TRIVIAL(info) << "Set log level to " << opts.log_level;
 
+    struct RepCutContext ctx;
+    ctx.graph_filename    = opts.graph_filename.c_str();
+    ctx.work_directory    = opts.work_directory.c_str();
+    ctx.nparts            = opts.nparts;
+    ctx.target_ib         = opts.target_ib;
+    ctx.parallel_threads  = opts.parallel_threads;
+    ctx.seed              = opts.seed;
+    ctx.log_level         = resolve_log_level();
 
-    BOOST_LOG_TRIVIAL(info) << "Read file";
+    struct RepCutStatistics stat{};
+    const int rc = repcut_run(&ctx, &stat);
+    if (rc != 0) {
+        return rc;
+    }
 
-    auto input_dag = std::make_unique<DirectedAcyclicGraph>();
-    input_dag->buildFromFile(opts.graph_filename.c_str());
-    PrintMemoryUsage();
-
-    // Find all sink Vtxs
-    input_dag->findSinkNodes();
-
-    BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
-    auto rcp = std::make_unique<RepCutPartitioner>();
-    rcp -> kahypar_imbalance_factor = opts.target_ib;
-    rcp -> cluster_parallel_threads = opts.parallel_threads;
-    rcp -> parallel_threads = opts.parallel_threads;
-    rcp -> kahypar_seed = opts.seed;
-    rcp -> set_work_directory(opts.work_directory);
-    rcp -> partition(*input_dag, opts.nparts);
-
-    PrintMemoryUsage();
-
-    auto stat = rcp -> reportPartitionStatus(*input_dag);
-    stat -> print_stat();
-
-    PrintMemoryUsage();
-
-    BOOST_LOG_TRIVIAL(info) << "Writing to output file";
-    rcp -> saveToFile("rcp_output.txt");
-
-    PrintMemoryUsage();
-
-    std::cout << "Done" << std::endl;
+    // CLI-only formatting of the aggregate stats.  The library does not print
+    // stats itself; this is the host tool's responsibility.
+    std::printf("================== Report Partition Statistics ==================\n");
+    std::printf("Total node count is %u, original statement graph has %u valid nodes\n",
+                stat.total_part_size, stat.sg_size);
+    std::printf("Duplication stmt cost: %u (%.2f%%)\n",
+                stat.replication_size, stat.replication_rate_size);
+    std::printf("Duplication weight cost: %.2f (%.2f%%)\n",
+                stat.replication_weight, stat.replication_rate_weight);
+    std::printf("Weight ib factor: %f\n", stat.ib_factor_weight);
+    std::printf("=================================================================\n");
 
     return 0;
 }

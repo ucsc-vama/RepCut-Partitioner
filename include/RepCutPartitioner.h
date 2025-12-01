@@ -13,6 +13,7 @@
 
 #include "DAG.h"
 #include "Util.h"
+#include "repcut.h"
 
 namespace fs = std::filesystem;
 
@@ -40,6 +41,9 @@ namespace repcut {
 
         std::string work_directory;
         void set_work_directory(const std::string& work_dir) {work_directory = work_dir;};
+
+        // Log threshold carried from RepCutContext.
+        RepCutLogLevel log_level = REPCUT_LOG_SILENT;
 
         // Result: cone (sink) → partition id, as reported by MtKaHyPar.
         std::vector<uint32_t> coneIdToPartId;

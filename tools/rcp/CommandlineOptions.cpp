@@ -1,10 +1,7 @@
-
 #include "CommandlineOptions.h"
 #include <iostream>
 
 CommandlineOptions opts;
-std::unordered_map<std::string, boost::log::trivial::severity_level> log_levels;
-const char* supported_log_levels = "fatal, error, warning, info, debug, trace";
 
 bool parse_commandline_options(int argc, char** argv) {
     // Declare the supported options.
@@ -14,16 +11,17 @@ bool parse_commandline_options(int argc, char** argv) {
             ("nparts", po::value<int>(), "num of partitions")
             ("graph_file", po::value<std::string>(), "input graph file")
             ("work_directory", po::value<std::string>(), "Working directory")
-            ("log_level", po::value<std::string>(), "log level")
-            ("target_ib", po::value<float>() ->default_value(0.03f), "target imbalance factor, default 0.03")
+            ("log_level", po::value<std::string>(), "log level (silent, error, warn, info, debug)")
+            ("target_ib", po::value<float>()->default_value(0.03f), "target imbalance factor, default 0.03")
             ("threads", po::value<int>(), "parallel threads pass to MtKaHyPar (only --threads 1 is deterministic)")
             ("seed", po::value<int>(), "seed pass to MtKaHyPar (-1 = MtKaHyPar default)")
+            ("verbose,v", po::value<int>()->implicit_value(1)->zero_tokens(),
+             "increase verbosity (-v = info, -vv = debug)")
             ;
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
-
 
     if (vm.count("target_ib")) {
         opts.target_ib = vm["target_ib"].as<float>();
@@ -53,7 +51,7 @@ bool parse_commandline_options(int argc, char** argv) {
     if (vm.count("log_level")) {
         opts.log_level = vm["log_level"].as<std::string>();
     } else {
-        opts.log_level = "warning";
+        opts.log_level = "";
     }
 
     if (vm.count("threads")) {
@@ -64,64 +62,54 @@ bool parse_commandline_options(int argc, char** argv) {
         opts.seed = vm["seed"].as<int>();
     }
 
-    // Construct log level table
-
-//    trace,
-//            debug,
-//            info,
-//            warning,
-//            error,
-//            fatal
-    log_levels["fatal"] = boost::log::trivial::fatal;
-    log_levels["error"] = boost::log::trivial::error;
-    log_levels["warning"] = boost::log::trivial::warning;
-    log_levels["info"] = boost::log::trivial::info;
-    log_levels["debug"] = boost::log::trivial::debug;
-    log_levels["trace"] = boost::log::trivial::trace;
+    if (vm.count("verbose")) {
+        opts.verbosity = vm["verbose"].as<int>();
+    }
 
     return opts.check();
 }
 
 bool CommandlineOptions::check() {
-    // Check if input is empty
-    if (graph_filename.length() == 0){
-        BOOST_LOG_TRIVIAL(fatal) << "Input graph file not given";
+    if (graph_filename.empty()) {
+        std::fprintf(stderr, "Input graph file not given\n");
         return false;
     }
-    // Check graph file status
     auto file_status = fs::status(graph_filename);
-
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
-        BOOST_LOG_TRIVIAL(fatal) << "Input graph file " << graph_filename << " does not exist or is not a regular file!";
+        std::fprintf(stderr, "Input graph file %s does not exist or is not a regular file!\n",
+                     graph_filename.c_str());
         return false;
     }
 
-    // Check output directory
     auto work_dir_status = fs::status(work_directory);
-
     if (!fs::exists(work_dir_status) || !fs::is_directory(work_dir_status)) {
-        BOOST_LOG_TRIVIAL(fatal) << "Work directory " << work_directory << " does not exist or is not a directory!";
+        std::fprintf(stderr, "Work directory %s does not exist or is not a directory!\n",
+                     work_directory.c_str());
         return false;
     }
 
-
-    // Check partition size
     if (nparts <= 0 || nparts >= 65535) {
-        BOOST_LOG_TRIVIAL(fatal) << "nparts should be within (0, 65535)";
+        std::fprintf(stderr, "nparts should be within (0, 65535)\n");
         return false;
     }
 
-    if (!log_levels.contains(log_level)) {
-        BOOST_LOG_TRIVIAL(fatal) << "Unsupported log level :" << log_level;
-        BOOST_LOG_TRIVIAL(fatal) << "Support options: " << supported_log_levels;
-        return false;
-    }
-
-//        BOOST_LOG_TRIVIAL(trace) << "A trace severity message";
-//        BOOST_LOG_TRIVIAL(debug) << "A debug severity message";
-//        BOOST_LOG_TRIVIAL(info) << "An informational severity message";
-//        BOOST_LOG_TRIVIAL(warning) << "A warning severity message";
-//        BOOST_LOG_TRIVIAL(error) << "An error severity message";
-//        BOOST_LOG_TRIVIAL(fatal) << "A fatal severity message";
     return true;
+}
+
+RepCutLogLevel resolve_log_level() {
+    // Explicit --log_level takes precedence.
+    if (!opts.log_level.empty()) {
+        if (opts.log_level == "silent") return REPCUT_LOG_SILENT;
+        if (opts.log_level == "error")  return REPCUT_LOG_ERROR;
+        if (opts.log_level == "warn")   return REPCUT_LOG_WARN;
+        if (opts.log_level == "info")   return REPCUT_LOG_INFO;
+        if (opts.log_level == "debug")  return REPCUT_LOG_DEBUG;
+        std::fprintf(stderr, "Unsupported log level: %s (silent, error, warn, info, debug)\n",
+                     opts.log_level.c_str());
+        std::exit(1);
+    }
+    // Fall back to -v / -vv.
+    if (opts.verbosity >= 2) return REPCUT_LOG_DEBUG;
+    if (opts.verbosity == 1) return REPCUT_LOG_INFO;
+    return REPCUT_LOG_SILENT;
 }

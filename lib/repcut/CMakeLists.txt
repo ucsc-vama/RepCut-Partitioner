@@ -13,6 +13,7 @@ target_sources(
     ConeTrie.cpp
     DAG.cpp
     Util.cpp
+    RepCut.cpp
     RepCutPartitioner.cpp 
     )
 

@@ -32,8 +32,6 @@ namespace repcut {
         uint32_t replication_size;
         float replication_rate_size;
         std::vector<uint32_t> partition_size;
-
-        void print_stat();
     };
 }
 

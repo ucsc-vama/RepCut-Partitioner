@@ -4,8 +4,9 @@
 #include <string>
 #include <unordered_map>
 
-#include <boost/log/trivial.hpp>
 #include <boost/program_options.hpp>
+
+#include "repcut.h"
 
 namespace fs = std::filesystem;
 namespace po = boost::program_options;
@@ -19,15 +20,19 @@ public:
     std::string log_level;
     float target_ib = 0.03f;
     int parallel_threads = 1;
-    // Seed forwarded to MtKaHyPar via `--seed`.  Default -1 lets MtKaHyPar
-    // choose its own seed (typically random).  Set a fixed value for
-    // reproducible partitioning runs.
     int seed = -1;
+    // Verbosity count from -v / -vv.  0 = silent, 1 = info, 2 = debug.
+    int verbosity = 0;
 
     bool check();
 };
 
 extern CommandlineOptions opts;
-extern std::unordered_map<std::string, boost::log::trivial::severity_level> log_levels;
 
+// Parse argc/argv into the global `opts`.  Returns false on error or --help.
 bool parse_commandline_options(int argc, char** argv);
+
+// Translate the parsed CLI options into the library's RepCutLogLevel.
+// If --log_level is given explicitly it takes precedence; otherwise -v / -vv
+// determine the level; otherwise silent.
+RepCutLogLevel resolve_log_level();

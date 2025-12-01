@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "repcut.h"
+
 namespace repcut {
 
     // Flat representation of the design DAG.  Replaces the earlier
@@ -25,6 +27,9 @@ namespace repcut {
 
         // Valid vertices with empty outNeigh, populated by findSinkNodes().
         std::vector<uint32_t> sinkNodes;
+
+        // Log threshold carried from RepCutContext.  Defaults to SILENT.
+        RepCutLogLevel log_level = REPCUT_LOG_SILENT;
 
         void buildFromFile(const char* filename);
         void findSinkNodes();
