@@ -12,7 +12,7 @@ include_directories(include)
 
 
 
-find_package(Boost REQUIRED COMPONENTS program_options log_setup log filesystem graph)
+find_package(Boost REQUIRED COMPONENTS program_options log_setup log filesystem)
 #find_package(Boost 1.69 REQUIRED COMPONENTS log)
 
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})

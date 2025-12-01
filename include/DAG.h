@@ -1,38 +1,34 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <vector>
-
-#include <boost/graph/adjacency_list.hpp>
 
 namespace repcut {
 
-    struct RawGraphNodeProperty {
-    public:
-        float weight;
-        bool valid;
-        // The source statement label parsed from the graph file.  Kept for
-        // debugging only (e.g. dumping a node's identity); never read by the
-        // partitioning pipeline.  Commented out by default because retaining
-        // a std::string per node on designs with millions of vertices is a
-        // substantial memory cost with no runtime benefit.
-        // std::string stmt;
-    };
-
-    // Note: use boost::vecS (std::vector) to ensure vertex_descriptor is integer and also incremental
-
-    typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, RawGraphNodeProperty, boost::no_property, boost::no_property, boost::listS> RawGraph;
-
+    // Flat representation of the design DAG.  Replaces the earlier
+    // boost::adjacency_list<bidirectionalS> storage with plain vectors.
+    // The graph is append-only during `buildFromFile` and frozen thereafter,
+    // so a CSR-like layout is sufficient and far lighter than BGL.
     class DirectedAcyclicGraph {
     public:
-        RawGraph graph;
+        // Per-vertex properties, indexed by vertex id.
+        std::vector<float> weight;       // numVertices; 0 for invalid nodes
+        std::vector<bool>  valid;        // numVertices
 
+        // Adjacency, indexed by vertex id.  Both directions are kept because
+        // cone-marking and reconstruction walk predecessors (inNeigh) while
+        // cluster flooding needs both directions for connected-component
+        // grouping.  Insertion order in these vectors matches the order edges
+        // appear in the input file, which is deterministic.
+        std::vector<std::vector<uint32_t>> inNeigh;
+        std::vector<std::vector<uint32_t>> outNeigh;
+
+        // Valid vertices with empty outNeigh, populated by findSinkNodes().
         std::vector<uint32_t> sinkNodes;
 
         void buildFromFile(const char* filename);
-
         void findSinkNodes();
 
+        size_t numVertices() const { return weight.size(); }
     };
 }

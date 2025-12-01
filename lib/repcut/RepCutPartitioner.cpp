@@ -157,12 +157,10 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
 
             // vis already contains v (we insert on push).  Skip invalid nodes
             // but still keep them in vis so we don't re-traverse their edges.
-            if (!dag.graph[v].valid) continue;
+            if (!dag.valid[v]) continue;
             part.push_back(v);
 
-            for (auto inEdges = boost::in_edges(v, dag.graph);
-                 inEdges.first != inEdges.second; ++inEdges.first) {
-                const auto u = static_cast<uint32_t>(boost::source(*inEdges.first, dag.graph));
+            for (const auto u : dag.inNeigh[v]) {
                 if (vis.insert(u).second) {
                     fringe.push_back(u);
                 }
@@ -220,11 +218,11 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
     ret->nparts = this->partitions.size();
 
     // Whole-design totals (only valid nodes).
-    for (auto vtxes = boost::vertices(dag.graph); vtxes.first != vtxes.second; ++vtxes.first) {
-        const auto v = *vtxes.first;
-        if (dag.graph[v].valid) {
+    const auto n = dag.numVertices();
+    for (uint32_t v = 0; v < n; ++v) {
+        if (dag.valid[v]) {
             ret->sg_size++;
-            ret->sg_weight += dag.graph[v].weight;
+            ret->sg_weight += dag.weight[v];
         }
     }
 
@@ -236,9 +234,9 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
         float part_weight = 0;
 
         for (auto& nid : part) {
-            if (dag.graph[nid].valid) {
+            if (dag.valid[nid]) {
                 part_size += 1;
-                part_weight += dag.graph[nid].weight;
+                part_weight += dag.weight[nid];
             }
         }
 

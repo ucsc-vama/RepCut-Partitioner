@@ -1,6 +1,6 @@
-
 #include "DAG.h"
 
+#include <cassert>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -43,10 +43,14 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
 //            size_t numEdges = std::stoi(split_line[0]);
             size_t numNodes = std::stoi(split_line[1]);
 
-            for (std::size_t i = 0; i < numNodes; ++i) {
-                auto newVtx = boost::add_vertex(graph);
-                assert(newVtx == i);
-            }
+            // Reserve capacity for all per-vertex storage up front.  We do not
+            // allocate the adjacency sub-vectors themselves (they grow lazily),
+            // but reserving the top-level slots avoids reallocation/copy of the
+            // outer vector as vertices stream in.
+            weight.resize(numNodes);
+            valid.resize(numNodes);
+            inNeigh.resize(numNodes);
+            outNeigh.resize(numNodes);
         } else{
             // normal line
             if (split_line.size() < 2) {
@@ -60,31 +64,34 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
 
             uint32_t node_id = lineno - 1;
 
-            RawGraphNodeProperty vp;
-            vp.weight = std::stof(split_line[1]);
-            // vp.stmt = split_line[0];  // debug only; see RawGraphNodeProperty
+            float node_weight = std::stof(split_line[1]);
+            // vp.stmt = split_line[0];  // debug only
 
-            if (vp.weight < 0) {
+            if (node_weight < 0) {
                 // An invalid node
-                vp.weight = 0;
-                vp.valid = false;
+                weight[node_id] = 0;
+                valid[node_id] = false;
             } else {
-                vp.valid = true;
-                // has edge(s)
-                if (split_line.size() > 1) {
+                weight[node_id] = node_weight;
+                valid[node_id] = true;
+                // Edges (if any) are tokens [2, split_line.size()).  Reserve
+                // the out-neighbor vector up front so push_back never
+                // reallocates mid-line.
+                if (split_line.size() > 2) {
+                    outNeigh[node_id].reserve(split_line.size() - 2);
                     for (uint32_t i = 2; i < split_line.size(); ++i) {
-                        uint32_t num = std::stoi(split_line[i]);
+                        int num = std::stoi(split_line[i]);
                         if (num < 0) {
                             BOOST_LOG_TRIVIAL(fatal) << "Node ID must be 0 or positive integer: Line " << lineno;
                             exit(-1);
                         }
-                        uint32_t dst_node = num;
+                        uint32_t dst_node = static_cast<uint32_t>(num);
                         // New edge: node_id -> dst_node
-                        boost::add_edge(node_id, dst_node, graph);
+                        outNeigh[node_id].push_back(dst_node);
+                        inNeigh[dst_node].push_back(node_id);
                     }
                 }
             }
-            graph[node_id] = vp;
         }
 
         lineno ++;
@@ -104,11 +111,11 @@ void DirectedAcyclicGraph::findSinkNodes() {
     BOOST_LOG_TRIVIAL(trace) << "Find all sink vtxs: Start";
     auto start = std::chrono::system_clock::now();
 
-    auto numNodes = boost::num_vertices(graph);
-    for (uint32_t nid = 0; nid < numNodes; nid++) {
-        if (graph[nid].valid) {
+    const auto n = numVertices();
+    for (uint32_t nid = 0; nid < n; nid++) {
+        if (valid[nid]) {
             // for all valid nodes
-            if (boost::out_degree(nid, graph) == 0) {
+            if (outNeigh[nid].empty()) {
                 // No out edges. This is a sink node
                 sinkNodes.push_back(nid);
             }

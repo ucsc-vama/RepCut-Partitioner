@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include "DAG.h"
@@ -23,11 +24,9 @@ namespace repcut {
     // not a hypergraph.
     class ClusterGraph {
     private:
-        // Build the persistent cone-id trie and per-vertex trie pointers.
-        // Replaces the old `_collect_cones` materialization of cones.
+        // Collapse phases.  See collapseFromDAG for the orchestration.
         void _mark_cones();
         void _collect_clusters();
-        void _build_cluster_graph();
         void _update_cluster_weight();
         void _update_cluster_cone();
 
@@ -38,7 +37,6 @@ namespace repcut {
         std::vector<ConeTrie::Node*> vtxToNode;
 
     public:
-        RawGraph graph;
         std::vector<uint32_t> sinkNodes;
 
         // Cone nodes in Cluster Graph (original cones are not retained).
@@ -61,8 +59,11 @@ namespace repcut {
         // trie path), which is more compact than an unordered_set.
         std::vector<std::vector<uint32_t>> clusterIdToPins;
 
-        // Cluster weight:
-        // std::vector<uint32_t> weight;
+        // Per-cluster weight (float, not the earlier floor cast).  Indexed by
+        // cluster id.  Replaces the bundled property on the former boost
+        // adjacency_list; only the weight was ever read downstream.
+        std::vector<float> nodeWeight;
+
         uint32_t parallel_threads = 1;
 
         void collapseFromDAG(const DirectedAcyclicGraph& dag);
