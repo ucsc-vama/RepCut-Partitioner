@@ -5,20 +5,22 @@
 #include "RepCutPartitioner.h"
 
 #include "ClusterGraph.h"
+#include "StringUtils.h"
 
 #include <boost/log/trivial.hpp>
 
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <format>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_set>
-
-#include <boost/algorithm/string.hpp>
-#include <boost/format.hpp>
 
 #include "process.hpp"
 
@@ -99,10 +101,23 @@ void RepCutPartitioner::_parseKaHyParResult() {
     this -> partIdToConeId.assign(this -> desired_parts, std::vector<uint32_t>());
 
     while (std::getline(kFile, line)) {
-        boost::trim(line);
-        int32_t pid = std::stoi(line);
+        TokenView tv(line);
+        auto tok = tv.next();
+        if (tok.empty()) {
+            BOOST_LOG_TRIVIAL(fatal) << "Empty partition id at line " << lineno;
+            exit(-1);
+        }
+        std::string buf(tok);  // strtol needs NUL-terminated
+        char* end = nullptr;
+        errno = 0;
+        long pid_long = std::strtol(buf.c_str(), &end, 10);
+        if (errno != 0 || end == buf.c_str() || *end != '\0') {
+            BOOST_LOG_TRIVIAL(fatal) << "Invalid partition id at line " << lineno << ": '" << tok << "'";
+            exit(-1);
+        }
+        int32_t pid = static_cast<int32_t>(pid_long);
         // cone ${lineno} is assigned to partition ${pid}
-        assert(pid < this -> desired_parts);
+        assert(pid < this->desired_parts);
         this -> coneIdToPartId.push_back(pid);
         this -> partIdToConeId[pid].push_back(lineno);
 
@@ -189,12 +204,15 @@ void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts) {
 
     // Output filename MtKaHyPar will produce.  Format must match what the
     // MtKaHyPar binary writes for the given hmetis input.
-    const std::string fmt_str = "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar";
-    this -> mtkahypar_output_filename = (boost::format(fmt_str)
-                                                  % hmetis_path.filename().string()
-                                                  % this -> desired_parts
-                                                  % this -> kahypar_imbalance_factor
-                                                  % this -> kahypar_seed).str();
+    // MtKaHyPar's output filename mirrors its input filename with the partition
+// parameters appended.  Matches the historical boost::format template
+// "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar".
+    this -> mtkahypar_output_filename = std::format(
+        "{}.part{}.epsilon{}.seed{}.KaHyPar",
+        hmetis_path.filename().string(),
+        this->desired_parts,
+        this->kahypar_imbalance_factor,
+        this->kahypar_seed);
 
     // 2. Call MtKaHyPar on the written hMetis file.
     _callMtKaHyPar();

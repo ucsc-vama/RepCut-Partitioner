@@ -1,15 +1,45 @@
 #include "DAG.h"
+#include "StringUtils.h"
 
 #include <cassert>
+#include <cerrno>
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
 
-#include <boost/algorithm/string.hpp>
 #include <boost/log/trivial.hpp>
 
 using namespace repcut;
+
+// Parse a uint32_t from a string_view using strto* (no std::string alloc,
+// no exceptions).  On failure, logs a fatal message naming the line and
+// exits.  `what` describes the field for the error message.
+static uint32_t parse_uint(std::string_view tok, uint32_t lineno, const char* what) {
+    std::string buf(tok);  // strto* needs NUL-terminated
+    char* end = nullptr;
+    errno = 0;
+    long v = std::strtol(buf.c_str(), &end, 10);
+    if (errno != 0 || end == buf.c_str() || *end != '\0' || v < 0) {
+        BOOST_LOG_TRIVIAL(fatal) << "Invalid " << what << " at line " << lineno << ": '" << tok << "'";
+        exit(-1);
+    }
+    return static_cast<uint32_t>(v);
+}
+
+static float parse_float(std::string_view tok, uint32_t lineno, const char* what) {
+    std::string buf(tok);
+    char* end = nullptr;
+    errno = 0;
+    float v = std::strtof(buf.c_str(), &end);
+    if (errno != 0 || end == buf.c_str() || *end != '\0') {
+        BOOST_LOG_TRIVIAL(fatal) << "Invalid " << what << " at line " << lineno << ": '" << tok << "'";
+        exit(-1);
+    }
+    return v;
+}
 
 void DirectedAcyclicGraph::buildFromFile(const char *filename) {
     BOOST_LOG_TRIVIAL(trace) << "Build DAG from file: Start";
@@ -19,53 +49,37 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
     std::string line;
     uint32_t lineno = 0;
 
-    std::vector<std::string> split_line;
-
     while (std::getline(file, line))
     {
-        split_line.clear();
-
-        boost::split(split_line, line, boost::is_any_of(" "));
-
+        TokenView tv(line);
 
         if (lineno == 0) {
-            // header
-
-            for (auto & i : split_line) {
-                boost::trim(i);
-            }
-
-            if (split_line.size() != 2) {
+            // header: numEdges numNodes
+            auto a = tv.next();
+            auto b = tv.next();
+            if (a.empty() || b.empty()) {
                 BOOST_LOG_TRIVIAL(fatal) << "Incorrect header at line " << lineno << ": " << line;
                 exit(-1);
             }
+            // numEdges is parsed for formatcompatibility but unused.
+            (void)parse_uint(a, lineno, "numEdges");
+            size_t numNodes = parse_uint(b, lineno, "numNodes");
 
-//            size_t numEdges = std::stoi(split_line[0]);
-            size_t numNodes = std::stoi(split_line[1]);
-
-            // Reserve capacity for all per-vertex storage up front.  We do not
-            // allocate the adjacency sub-vectors themselves (they grow lazily),
-            // but reserving the top-level slots avoids reallocation/copy of the
-            // outer vector as vertices stream in.
             weight.resize(numNodes);
             valid.resize(numNodes);
             inNeigh.resize(numNodes);
             outNeigh.resize(numNodes);
-        } else{
-            // normal line
-            if (split_line.size() < 2) {
+        } else {
+            // normal line: Label Weight out0 out1 ...
+            auto label_tok = tv.next();
+            auto weight_tok = tv.next();
+            if (label_tok.empty() || weight_tok.empty()) {
                 BOOST_LOG_TRIVIAL(fatal) << "Too few token(s) in line " << lineno << ": " << line;
                 exit(-1);
             }
 
-            for (uint32_t i = 1; i < split_line.size(); i++) {
-                boost::trim(split_line[i]);
-            }
-
             uint32_t node_id = lineno - 1;
-
-            float node_weight = std::stof(split_line[1]);
-            // vp.stmt = split_line[0];  // debug only
+            float node_weight = parse_float(weight_tok, lineno, "node weight");
 
             if (node_weight < 0) {
                 // An invalid node
@@ -74,27 +88,19 @@ void DirectedAcyclicGraph::buildFromFile(const char *filename) {
             } else {
                 weight[node_id] = node_weight;
                 valid[node_id] = true;
-                // Edges (if any) are tokens [2, split_line.size()).  Reserve
-                // the out-neighbor vector up front so push_back never
-                // reallocates mid-line.
-                if (split_line.size() > 2) {
-                    outNeigh[node_id].reserve(split_line.size() - 2);
-                    for (uint32_t i = 2; i < split_line.size(); ++i) {
-                        int num = std::stoi(split_line[i]);
-                        if (num < 0) {
-                            BOOST_LOG_TRIVIAL(fatal) << "Node ID must be 0 or positive integer: Line " << lineno;
-                            exit(-1);
-                        }
-                        uint32_t dst_node = static_cast<uint32_t>(num);
-                        // New edge: node_id -> dst_node
-                        outNeigh[node_id].push_back(dst_node);
-                        inNeigh[dst_node].push_back(node_id);
-                    }
+                // Pre-reserve the out-neighbor vector to the exact remaining
+                // token count so push_back never reallocates mid-line.
+                outNeigh[node_id].reserve(tv.count());
+                while (!tv.done()) {
+                    auto tok = tv.next();
+                    uint32_t dst = parse_uint(tok, lineno, "node id");
+                    outNeigh[node_id].push_back(dst);
+                    inNeigh[dst].push_back(node_id);
                 }
             }
         }
 
-        lineno ++;
+        lineno++;
     }
 
 
