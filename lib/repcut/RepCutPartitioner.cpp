@@ -2,9 +2,11 @@
 // Created by Haoyuan Wang on 11/11/22.
 //
 
-#include "rep_cut_partitioner.h"
+#include "RepCutPartitioner.h"
 
-#include "cluster_graph.h"
+#include "ClusterGraph.h"
+
+#include <boost/log/trivial.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -24,18 +26,17 @@ using namespace repcut;
 
 
 // Build the cluster graph from the design DAG and stream it to an hMetis
-// file.  The cluster graph is freed before returning so its memory does not
-// overlap with the MtKaHyPar call or the reconstruction pass.
-void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph* dag) {
+// file.  The cluster graph is stack-allocated and destroyed before
+// returning so its memory does not overlap with the MtKaHyPar call or the
+// reconstruction pass.
+void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag) {
     BOOST_LOG_TRIVIAL(info) << "Collapse into cluster graph";
-    auto* cluster_graph = new ClusterGraph();
-    cluster_graph->parallel_threads = cluster_parallel_threads;
-    cluster_graph->collapseFromDAG(dag);
+    ClusterGraph cluster_graph;
+    cluster_graph.parallel_threads = cluster_parallel_threads;
+    cluster_graph.collapseFromDAG(dag);
 
     hmetis_path = fs::path(work_directory) / "parts.hmetis";
-    cluster_graph->writeHMetisFile(hmetis_path.c_str());
-
-    delete cluster_graph;
+    cluster_graph.writeHMetisFile(hmetis_path.c_str());
 }
 
 void RepCutPartitioner::_callMtKaHyPar() {
@@ -117,12 +118,11 @@ void RepCutPartitioner::_parseKaHyParResult() {
 //
 // `vis` (per-partition unordered_set) serves as both the BFS visited marker
 // and the dedup container; reused across partitions via clear().
-void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph* dag) {
+void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
     BOOST_LOG_TRIVIAL(info) << "Reconstruct partitions";
     auto start = std::chrono::system_clock::now();
 
-    assert(dag != nullptr);
-    assert(coneIdToPartId.size() == dag->sinkNodes.size());
+    assert(coneIdToPartId.size() == dag.sinkNodes.size());
 
     partitions.clear();
     partitions.assign(desired_parts, std::vector<uint32_t>());
@@ -139,7 +139,7 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph* dag) {
         sinksForPart.clear();
         for (uint32_t cone_id = 0; cone_id < coneIdToPartId.size(); ++cone_id) {
             if (coneIdToPartId[cone_id] == pid) {
-                sinksForPart.push_back(dag->sinkNodes[cone_id]);
+                sinksForPart.push_back(dag.sinkNodes[cone_id]);
             }
         }
 
@@ -157,12 +157,12 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph* dag) {
 
             // vis already contains v (we insert on push).  Skip invalid nodes
             // but still keep them in vis so we don't re-traverse their edges.
-            if (!dag->graph[v].valid) continue;
+            if (!dag.graph[v].valid) continue;
             part.push_back(v);
 
-            for (auto inEdges = boost::in_edges(v, dag->graph);
+            for (auto inEdges = boost::in_edges(v, dag.graph);
                  inEdges.first != inEdges.second; ++inEdges.first) {
-                const auto u = static_cast<uint32_t>(boost::source(*inEdges.first, dag->graph));
+                const auto u = static_cast<uint32_t>(boost::source(*inEdges.first, dag.graph));
                 if (vis.insert(u).second) {
                     fringe.push_back(u);
                 }
@@ -179,7 +179,7 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph* dag) {
     BOOST_LOG_TRIVIAL(info) << "Reconstruct: Done in " << duration.count() << "ms";
 }
 
-void RepCutPartitioner::partition(DirectedAcyclicGraph* dag, const int nparts) {
+void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts) {
     BOOST_LOG_TRIVIAL(info) << "RepCut Partitioner: Start";
     auto start = std::chrono::system_clock::now();
 
@@ -213,18 +213,18 @@ void RepCutPartitioner::partition(DirectedAcyclicGraph* dag, const int nparts) {
     BOOST_LOG_TRIVIAL(info) << "RepCut Partitioner: Done in " << time_ms << "ms";
 }
 
-PartitionStatistics* RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph* dag) {
+std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph& dag) {
     assert(!this->partitions.empty());
 
-    auto ret = new PartitionStatistics();
+    auto ret = std::make_unique<PartitionStatistics>();
     ret->nparts = this->partitions.size();
 
     // Whole-design totals (only valid nodes).
-    for (auto vtxes = boost::vertices(dag->graph); vtxes.first != vtxes.second; ++vtxes.first) {
+    for (auto vtxes = boost::vertices(dag.graph); vtxes.first != vtxes.second; ++vtxes.first) {
         const auto v = *vtxes.first;
-        if (dag->graph[v].valid) {
+        if (dag.graph[v].valid) {
             ret->sg_size++;
-            ret->sg_weight += dag->graph[v].weight;
+            ret->sg_weight += dag.graph[v].weight;
         }
     }
 
@@ -236,9 +236,9 @@ PartitionStatistics* RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGra
         float part_weight = 0;
 
         for (auto& nid : part) {
-            if (dag->graph[nid].valid) {
+            if (dag.graph[nid].valid) {
                 part_size += 1;
-                part_weight += dag->graph[nid].weight;
+                part_weight += dag.graph[nid].weight;
             }
         }
 

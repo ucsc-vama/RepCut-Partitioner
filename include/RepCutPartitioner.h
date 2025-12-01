@@ -5,17 +5,24 @@
 #ifndef RCP_REP_CUT_PARTITIONER_H
 #define RCP_REP_CUT_PARTITIONER_H
 
-#include "rcp_common.h"
-#include "dag.h"
-#include "rcp_util.h"
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "DAG.h"
+#include "Util.h"
+
+namespace fs = std::filesystem;
 
 namespace repcut {
     class RepCutPartitioner {
     private:
-        void _buildAndWriteHmetis(DirectedAcyclicGraph* dag);
+        void _buildAndWriteHmetis(DirectedAcyclicGraph& dag);
         void _callMtKaHyPar();
         void _parseKaHyParResult();
-        void _reconstruct(DirectedAcyclicGraph* dag);
+        void _reconstruct(DirectedAcyclicGraph& dag);
 
         // hmetis file path (written by _buildAndWriteHmetis, read by _callMtKaHyPar).
         fs::path hmetis_path;
@@ -47,10 +54,12 @@ namespace repcut {
         // graph, write hMetis, call MtKaHyPar, parse result, reconstruct
         // per-partition DAG node sets via upstream BFS).  Fills `partitions`
         // and `coneIdToPartId`.
-        void partition(DirectedAcyclicGraph* dag, const int nparts);
+        void partition(DirectedAcyclicGraph& dag, const int nparts);
 
         // Compute statistics over `partitions` against the design DAG.
-        PartitionStatistics* reportPartitionStatus(DirectedAcyclicGraph* dag);
+        // Returns a unique_ptr so the caller does not have to manage lifetime
+        // manually.
+        std::unique_ptr<PartitionStatistics> reportPartitionStatus(DirectedAcyclicGraph& dag);
 
         // Write `partitions` (one comma-separated line of DAG node ids per
         // partition) to `${work_directory}/${filename}`.

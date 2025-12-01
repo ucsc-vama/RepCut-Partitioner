@@ -5,15 +5,22 @@
 #ifndef RCP_COLLAPSE_GRAPH_H
 #define RCP_COLLAPSE_GRAPH_H
 
-#include "rcp_common.h"
-
-#include "dag.h"
-
-#include "cone_trie.h"
-
+#include <cstdint>
 #include <memory>
+#include <vector>
+
+#include "DAG.h"
+
+#include "ConeTrie.h"
 
 namespace repcut {
+    // The ClusterGraph is the intermediate structure from RepCut's algorithm
+    // (§ "Generating the Intersection Hypergraph" of the ASPLOS'23 paper): a
+    // DAG whose vertices are clusters (groups of DAG vertices sharing the
+    // same set of cones) and whose edges are inter-cluster dependencies.
+    // `writeHMetisFile` derives the intersection hypergraph from this graph
+    // and writes the hMetis input for MtKaHyPar; the cluster graph itself is
+    // not a hypergraph.
     class ClusterGraph {
     private:
         // Build the persistent cone-id trie and per-vertex trie pointers.
@@ -43,7 +50,11 @@ namespace repcut {
         // -2 invalid
         std::vector<int32_t> idToClusterId;
 
-        DirectedAcyclicGraph* dag = nullptr;
+        // Non-owning borrow of the design DAG.  Set once by collapseFromDAG
+        // and only read thereafter (const-correctness enforced via
+        // pointer-to-const).  Not a smart pointer because ClusterGraph does
+        // not own (and must not outlive) the DAG.
+        const DirectedAcyclicGraph* dag = nullptr;
 
         // Pins per cluster: the (sorted, unique) set of cone ids touching the
         // cluster.  Stored as a sorted vector of cone ids (derived from the
@@ -54,7 +65,7 @@ namespace repcut {
         // std::vector<uint32_t> weight;
         uint32_t parallel_threads = 1;
 
-        void collapseFromDAG(DirectedAcyclicGraph* dag);
+        void collapseFromDAG(const DirectedAcyclicGraph& dag);
 
         // Stream the cluster graph to an hMetis-format file, directly from
         // the cluster graph's fields.  This replaces the intermediate

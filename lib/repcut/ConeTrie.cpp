@@ -2,7 +2,7 @@
 // Persistent cone-id trie implementation.
 //
 
-#include "cone_trie.h"
+#include "ConeTrie.h"
 
 #include <algorithm>
 

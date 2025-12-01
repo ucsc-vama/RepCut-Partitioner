@@ -1,9 +1,13 @@
 #pragma once
 
-#include "rcp_common.h"
+#include <filesystem>
+#include <string>
+#include <unordered_map>
 
 #include <boost/log/trivial.hpp>
 #include <boost/program_options.hpp>
+
+namespace fs = std::filesystem;
 namespace po = boost::program_options;
 
 

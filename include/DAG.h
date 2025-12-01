@@ -1,6 +1,9 @@
 #pragma once
 
-#include "rcp_common.h"
+#include <cstdint>
+#include <string>
+#include <vector>
+
 #include <boost/graph/adjacency_list.hpp>
 
 namespace repcut {

@@ -2,20 +2,19 @@
 // Created by Haoyuan Wang on 11/8/22.
 //
 
-#include "dag.h"
-#include "rcp_common.h"
+#include "ClusterGraph.h"
+#include "ConeTrie.h"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <algorithm>
+#include <fstream>
+#include <iostream>
 #include <numeric>
 #include <unordered_set>
-
-#include "cluster_graph.h"
-#include "cone_trie.h"
-#include <iostream>
-#include <fstream>
 #include <vector>
+
+#include <boost/log/trivial.hpp>
 
 using namespace repcut;
 
@@ -49,7 +48,7 @@ void ClusterGraph::_mark_cones() {
 
     // Cones are processed in strictly increasing cone-id order, so each
     // vertex's root-to-leaf trie path is its canonical (sorted, unique)
-    // cone-id set.  See the ordering invariant in include/cone_trie.h.
+    // cone-id set.  See the ordering invariant in include/ConeTrie.h.
     // Do not parallelize this loop without re-establishing that invariant.
     for (uint32_t cone_id = 0; cone_id < numSinks; ++cone_id) {
         const uint32_t seed = dag->sinkNodes[cone_id];
@@ -311,11 +310,11 @@ void ClusterGraph::_update_cluster_cone() {
 }
 
 
-void ClusterGraph::collapseFromDAG(DirectedAcyclicGraph *dag) {
+void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph &dag) {
     BOOST_LOG_TRIVIAL(info) << "Collapse cluster graph: Start";
     auto start = std::chrono::system_clock::now();
 
-    this -> dag = dag;
+    this -> dag = &dag;
     // 1. find sink vtxs
     // Already done in dag
 

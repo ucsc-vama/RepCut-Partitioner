@@ -1,8 +1,10 @@
 #include <iostream>
 
-#include "commandline_options.h"
-#include "dag.h"
-#include "rep_cut_partitioner.h"
+#include "CommandlineOptions.h"
+#include "DAG.h"
+#include "RepCutPartitioner.h"
+
+#include <memory>
 
 #include <boost/log/utility/setup/console.hpp>
 
@@ -75,7 +77,7 @@ int main(int argc, char** argv) {
 
     BOOST_LOG_TRIVIAL(info) << "Read file";
 
-    auto* input_dag = new DirectedAcyclicGraph();
+    auto input_dag = std::make_unique<DirectedAcyclicGraph>();
     input_dag->buildFromFile(opts.graph_filename.c_str());
     PrintMemoryUsage();
 
@@ -83,18 +85,17 @@ int main(int argc, char** argv) {
     input_dag->findSinkNodes();
 
     BOOST_LOG_TRIVIAL(info) << "Start Rep Cut partitioner";
-    auto* rcp = new RepCutPartitioner();
+    auto rcp = std::make_unique<RepCutPartitioner>();
     rcp -> kahypar_imbalance_factor = opts.target_ib;
     rcp -> cluster_parallel_threads = opts.parallel_threads;
     rcp -> parallel_threads = opts.parallel_threads;
     rcp -> set_work_directory(opts.work_directory);
-    rcp -> partition(input_dag, opts.nparts);
+    rcp -> partition(*input_dag, opts.nparts);
 
     PrintMemoryUsage();
 
-    auto stat = rcp -> reportPartitionStatus(input_dag);
+    auto stat = rcp -> reportPartitionStatus(*input_dag);
     stat -> print_stat();
-    delete stat;
 
     PrintMemoryUsage();
 
@@ -104,9 +105,6 @@ int main(int argc, char** argv) {
     PrintMemoryUsage();
 
     std::cout << "Done" << std::endl;
-
-    delete rcp;
-    delete input_dag;
 
     return 0;
 }

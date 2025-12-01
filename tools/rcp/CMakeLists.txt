@@ -2,7 +2,7 @@
 
 add_executable(rcp
         main.cpp
-        commandline_options.cpp
+        CommandlineOptions.cpp
 )
 
 

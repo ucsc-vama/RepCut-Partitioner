@@ -2,18 +2,19 @@
 // Created by Haoyuan Wang on 11/14/22.
 //
 
-#ifndef RCP_RCP_UTIL_H
-#define RCP_RCP_UTIL_H
+#ifndef RCP_UTIL_H
+#define RCP_UTIL_H
 
-#include "rcp_common.h"
+#include <cstdint>
+#include <vector>
 
 namespace repcut {
     float calculate_ib_factor(std::vector<uint32_t>& dat);
     float calculate_ib_factor(std::vector<float>& dat);
 
     // Aggregated statistics for a partitioning result.  Reconstructed by
-    // Reconstructor::reportPartitionStatus from the per-partition DAG node
-    // lists.  Formerly partition_stat.h.
+    // RepCutPartitioner::reportPartitionStatus from the per-partition DAG
+    // node lists.
     class PartitionStatistics {
     public:
         uint32_t nparts;
@@ -37,4 +38,4 @@ namespace repcut {
 }
 
 
-#endif //RCP_RCP_UTIL_H
+#endif //RCP_UTIL_H

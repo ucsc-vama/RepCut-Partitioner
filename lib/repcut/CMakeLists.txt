@@ -9,11 +9,11 @@ target_sources(
     repcut
 
     PRIVATE 
-    cluster_graph.cpp
-    cone_trie.cpp
-    dag.cpp
-    rcp_util.cpp
-    rep_cut_partitioner.cpp 
+    ClusterGraph.cpp
+    ConeTrie.cpp
+    DAG.cpp
+    Util.cpp
+    RepCutPartitioner.cpp 
     )
 
 # target_compile_features(repcut PUBLIC cxx_std_17)
