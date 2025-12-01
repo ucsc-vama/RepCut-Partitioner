@@ -89,6 +89,7 @@ int main(int argc, char** argv) {
     rcp -> kahypar_imbalance_factor = opts.target_ib;
     rcp -> cluster_parallel_threads = opts.parallel_threads;
     rcp -> parallel_threads = opts.parallel_threads;
+    rcp -> kahypar_seed = opts.seed;
     rcp -> set_work_directory(opts.work_directory);
     rcp -> partition(*input_dag, opts.nparts);
 

@@ -19,6 +19,10 @@ public:
     std::string log_level;
     float target_ib = 0.03f;
     int parallel_threads = 1;
+    // Seed forwarded to MtKaHyPar via `--seed`.  Default -1 lets MtKaHyPar
+    // choose its own seed (typically random).  Set a fixed value for
+    // reproducible partitioning runs.
+    int seed = -1;
 
     bool check();
 };

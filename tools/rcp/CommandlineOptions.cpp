@@ -17,6 +17,7 @@ bool parse_commandline_options(int argc, char** argv) {
             ("log_level", po::value<std::string>(), "log level")
             ("target_ib", po::value<float>() ->default_value(0.03f), "target imbalance factor, default 0.03")
             ("threads", po::value<int>(), "parallel threads pass to MtKaHyPar")
+            ("seed", po::value<int>(), "seed pass to MtKaHyPar (-1 = MtKaHyPar default)")
             ;
 
     po::variables_map vm;
@@ -57,6 +58,10 @@ bool parse_commandline_options(int argc, char** argv) {
 
     if (vm.count("threads")) {
         opts.parallel_threads = vm["threads"].as<int>();
+    }
+
+    if (vm.count("seed")) {
+        opts.seed = vm["seed"].as<int>();
     }
 
     // Construct log level table
