@@ -12,12 +12,13 @@
 #include <cassert>
 #include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <format>
-#include <iostream>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -113,7 +114,18 @@ void RepCutPartitioner::_callMtKaHyPar() {
     }
     rcp_log(log_level, REPCUT_LOG_INFO, "MtKaHyPar cmd: %s\n", oss.str().c_str());
 
-    TinyProcessLib::Process kahypar_process(args, "");
+    // Forward MtKaHyPar's stdout and stderr to our stderr only when the user
+    // asked for info/debug logging.
+    using Reader = std::function<void(const char*, size_t)>;
+    auto noop = [](const char*, size_t) {};
+    Reader fwd = [this](const char* bytes, size_t n) {
+        rcp_log(log_level, REPCUT_LOG_INFO, "%.*s", static_cast<int>(n), bytes);
+    };
+    const bool verbose = rcp_should_log(log_level, REPCUT_LOG_INFO);
+    TinyProcessLib::Process kahypar_process(args, "",
+                                             verbose ? fwd : noop,
+                                             verbose ? fwd : noop,
+                                             false);
     auto ret_code = kahypar_process.get_exit_status();
 
     if (ret_code != 0) {
