@@ -15,7 +15,6 @@
 #include <fstream>
 #include <format>
 #include <functional>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -60,7 +59,6 @@ bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
     ClusterGraph cluster_graph;
-    cluster_graph.parallel_threads = cluster_parallel_threads;
     cluster_graph.log_level = log_level;
     cluster_graph.collapseFromDAG(dag);
 
@@ -295,12 +293,16 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
 
     ret->total_part_size = total_part_size;
     ret->replication_size = ret->total_part_size - ret->sg_size;
-    ret->replication_rate_size = static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size;
+    ret->replication_rate_size = (ret->sg_size > 0)
+        ? static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size
+        : 0.0f;
     ret->ib_factor_size = calculate_ib_factor(ret->partition_size);
 
     ret->total_part_weight = total_part_weight;
     ret->replication_weight = ret->total_part_weight - ret->sg_weight;
-    ret->replication_rate_weight = static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight;
+    ret->replication_rate_weight = (ret->sg_weight != 0.0f)
+        ? static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight
+        : 0.0f;
     ret->ib_factor_weight = calculate_ib_factor(ret->partition_weights);
 
     return ret;

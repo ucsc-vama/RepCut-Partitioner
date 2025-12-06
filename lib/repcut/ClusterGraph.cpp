@@ -6,7 +6,6 @@
 #include <cassert>
 #include <chrono>
 #include <fstream>
-#include <iostream>
 #include <numeric>
 #include <unordered_set>
 #include <vector>

@@ -34,7 +34,6 @@ namespace repcut {
         int32_t kahypar_seed = -1;
         uint32_t desired_parts = 0;
         int parallel_threads = -1;
-        uint32_t cluster_parallel_threads = 1;
 
         std::string work_directory;
         void set_work_directory(const std::string& work_dir) { work_directory = work_dir; }

@@ -96,7 +96,6 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
 
     // Run partitioner
     rcp->kahypar_imbalance_factor = ctx->target_ib;
-    rcp->cluster_parallel_threads = ctx->parallel_threads;
     rcp->parallel_threads = ctx->parallel_threads;
     rcp->kahypar_seed = ctx->seed;
     rcp->set_work_directory(ctx->work_directory);

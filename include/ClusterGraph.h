@@ -47,8 +47,6 @@ namespace repcut {
         // Per-cluster weight (float).
         std::vector<float> nodeWeight;
 
-        uint32_t parallel_threads = 1;
-
         // Log threshold carried from RepCutContext.
         RepCutLogLevel log_level = REPCUT_LOG_SILENT;
 
