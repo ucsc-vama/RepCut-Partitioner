@@ -21,8 +21,9 @@ library (`librepcut`) suitable for embedding into other simulators/tools.
 
 1. Compiler that supports C++20
 2. `boost::program_options` — only needed when building the `rcp` CLI tool.
-   `librepcut` itself has zero external dependency (it links only the bundled
-   `tiny-process-library`).
+   `librepcut` itself has zero Boost dependency (it links only the vendored
+   [`tiny-process-library`](https://gitlab.com/eidheim/tiny-process-library)
+   sources, which are included in-tree under `external/tiny-process-library/`).
 
 `MtKaHyPar` binary directory must be in `$PATH` or specified.
 
