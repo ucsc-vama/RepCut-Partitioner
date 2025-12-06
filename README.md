@@ -1,8 +1,18 @@
 # RepCut Partitioner
 
-A C++ re-implementation of the RepCut partitioner from *RepCut: Superlinear
+A C++ implementation of the RepCut partitioner from *RepCut: Superlinear
 Parallel RTL Simulation with Replication-Aided Partitioning* (Wang & Beamer,
 ASPLOS 2023).
+
+```bibtex
+@inproceedings{wang2023repcut,
+  title={Repcut: Superlinear parallel rtl simulation with replication-aided partitioning},
+  author={Wang, Haoyuan and Beamer, Scott},
+  booktitle={Proceedings of the 28th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 3},
+  pages={572--585},
+  year={2023}
+}
+```
 
 This release ships both a command-line tool (`rcp`) and a small reentrant C
 library (`librepcut`) suitable for embedding into other simulators/tools.
@@ -11,11 +21,10 @@ library (`librepcut`) suitable for embedding into other simulators/tools.
 
 1. Compiler that supports C++20
 2. `boost::program_options` — only needed when building the `rcp` CLI tool.
-   `librepcut` itself has zero Boost dependency (it links only the bundled
+   `librepcut` itself has zero external dependency (it links only the bundled
    `tiny-process-library`).
-3. The bundled `tiny-process-library` submodule under `external/`.
 
-`MtKaHyPar` binary directory must be in `$PATH` at runtime.
+`MtKaHyPar` binary directory must be in `$PATH` or specified.
 
 # Build
 
@@ -71,6 +80,37 @@ is not invoked, so Boost need not be installed on the build machine.
 By default the tool is silent on success and prints errors to stderr.
 Info/debug logs go to stderr; partition statistics (on success) go to stdout.
 
+## On `--target_ib` (imbalance target)
+
+RepCut asks MtKaHyPar to do two things:
+
+1. **Balance partition size** — controlled by `--target_ib` (the ε passed to
+   MtKaHyPar).  Partitions are guaranteed to deviate from the average by at
+   most a factor of ε.
+2. **Minimize replication** — the km1 objective.  Replication is what breaks
+   intra-cycle dependences between partitions, but it also adds work.
+
+The RepCut algorithm itself cannot *a priori* formulate where the replication
+will land across partitions.  Even when MtKaHyPar produces a well-balanced
+result on the proxy hypergraph, the replication it introduces is distributed
+back across the RepCut partitions in a way RepCut does not directly control.
+So in situations with high replication, the post-replication RepCut
+partitions can still be unbalanced despite a tight `--target_ib`.
+
+This has a less-than-intuitive consequence: **if you observe high
+replication, raising `--target_ib` may actually both reduce replication and improve the real balance.**
+A larger `target_ib` gives MtKaHyPar more search space to reduce the km1 objective
+(replication), and the resulting drop in replication can more than offset
+the looser balance target on the proxy hypergraph.
+
+In short:
+
+- The right value of `--target_ib` depends on the input graph.
+- `0.03` is simply MtKaHyPar's default and is **likely too small** for many
+  RepCut inputs.
+- If your partition stats show a high duplication cost, try a larger value
+  (e.g. 0.1, 0.3) and compare the resulting balance.
+
 ## Example
 
 To partition `rocket21-1c.graph` into 4 partitions with info-level logging:
@@ -81,7 +121,20 @@ To reproduce a run exactly:
 
 > rcp --graph_file ./example/rocket21-1c.graph --work_directory ~/tmp --nparts 4 --threads 1 --seed 42
 
-Output file will be written to `rcp_output.txt` under the work directory.
+## Output
+
+The partitioned result is written to `${work_directory}/rcp_output.txt`.
+
+Format: one line per partition, containing a comma-separated list of DAG node
+ids that the partition must simulate (replicated ancestors included). Node ids
+are sorted ascending and correspond to the graph file's line number minus one
+(line 1 = node 0, line 2 = node 1, ...).
+
+> `node_id,node_id,...`\
+> `node_id,node_id,...`\
+> ...
+
+Partition lines are written in partition-id order (0, 1, ..., nparts-1).
 
 # C Library API
 
