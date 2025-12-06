@@ -65,7 +65,9 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
         lk << "repcut\n";
     }
 
-    // RAII lock guard (note: exit(-1) bypasses destructors).
+    // RAII lock guard — removes the lock on normal return (including early
+    // error returns below).  No exit() calls anywhere in the library, so
+    // destructors always run.
     struct LockGuard
     {
         fs::path p;
@@ -78,16 +80,18 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
     } guard{lock_path};
 
     // Early MtKaHyPar check (fail fast before graph traversal).
-    auto rcp = std::make_unique<repcut::RepCutPartitioner>();
+    auto rcp = std::make_unique<RepCutPartitioner>();
     rcp->log_level = ll;
     if (!rcp->prepareMtKaHyParBin(ctx->mtkahypar_bin)) {
         return 1;
     }
 
     // Build DAG
-    auto dag = std::make_unique<repcut::DirectedAcyclicGraph>();
+    auto dag = std::make_unique<DirectedAcyclicGraph>();
     dag->log_level = ll;
-    dag->buildFromFile(ctx->graph_filename);
+    if (!dag->buildFromFile(ctx->graph_filename)) {
+        return 1;
+    }
     dag->findSinkNodes();
 
     // Run partitioner
@@ -96,7 +100,9 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
     rcp->parallel_threads = ctx->parallel_threads;
     rcp->kahypar_seed = ctx->seed;
     rcp->set_work_directory(ctx->work_directory);
-    rcp->partition(*dag, ctx->nparts);
+    if (!rcp->partition(*dag, ctx->nparts)) {
+        return 1;
+    }
 
     // Write output file
     rcp->saveToFile("rcp_output.txt");

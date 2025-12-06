@@ -25,7 +25,10 @@ namespace repcut {
         // Log threshold carried from RepCutContext.  Defaults to SILENT.
         RepCutLogLevel log_level = REPCUT_LOG_SILENT;
 
-        void buildFromFile(const char* filename);
+        // Parse the graph file into this DAG.  Returns true on success,
+        // false on malformed input (with an error logged via rcp_log).
+        bool buildFromFile(const char* filename);
+
         void findSinkNodes();
 
         size_t numVertices() const { return weight.size(); }

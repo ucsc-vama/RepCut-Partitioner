@@ -16,10 +16,10 @@ namespace repcut {
     class RepCutPartitioner
     {
     private:
-        void _buildAndWriteHmetis(DirectedAcyclicGraph& dag);
-        void _callMtKaHyPar();
-        void _parseKaHyParResult();
-        void _reconstruct(DirectedAcyclicGraph& dag);
+        bool _buildAndWriteHmetis(DirectedAcyclicGraph& dag);
+        bool _callMtKaHyPar();
+        bool _parseKaHyParResult();
+        bool _reconstruct(DirectedAcyclicGraph& dag);
 
         // hmetis file path (written by _buildAndWriteHmetis, read by _callMtKaHyPar).
         fs::path hmetis_path;
@@ -53,7 +53,7 @@ namespace repcut {
         std::vector<std::vector<uint32_t>> partitions;
 
         // Run the full RepCut pipeline on a design DAG.
-        void partition(DirectedAcyclicGraph& dag, const int nparts);
+        bool partition(DirectedAcyclicGraph& dag, const int nparts);
 
         // Compute partition statistics against the design DAG.
         std::unique_ptr<PartitionStatistics> reportPartitionStatus(DirectedAcyclicGraph& dag);

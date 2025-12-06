@@ -12,9 +12,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <format>
 #include <fstream>
+#include <format>
 #include <functional>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -55,7 +56,7 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
 }
 
 // Build cluster graph from DAG and write hMetis file.
-void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
+bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
     ClusterGraph cluster_graph;
@@ -65,9 +66,10 @@ void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
 
     hmetis_path = fs::path(work_directory) / "parts.hmetis";
     cluster_graph.writeHMetisFile(hmetis_path.c_str());
+    return true;
 }
 
-void RepCutPartitioner::_callMtKaHyPar()
+bool RepCutPartitioner::_callMtKaHyPar()
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Call MtKaHyPar\n");
     assert(this->parallel_threads > 0);
@@ -113,11 +115,12 @@ void RepCutPartitioner::_callMtKaHyPar()
 
     if (ret_code != 0) {
         rcp_log(log_level, REPCUT_LOG_ERROR, "MtKaHyPar returns non-zero code: %d\n", ret_code);
-        exit(-1);
+        return false;
     }
+    return true;
 }
 
-void RepCutPartitioner::_parseKaHyParResult()
+bool RepCutPartitioner::_parseKaHyParResult()
 {
     auto kahypar_output_fullpath = fs::path(work_directory) / this->mtkahypar_output_filename;
 
@@ -125,7 +128,7 @@ void RepCutPartitioner::_parseKaHyParResult()
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
         rcp_log(log_level, REPCUT_LOG_ERROR, "KaHyPar result file %s does not exist or is not a regular file!\n",
                 kahypar_output_fullpath.c_str());
-        exit(-1);
+        return false;
     }
 
     std::ifstream kFile(kahypar_output_fullpath);
@@ -141,7 +144,7 @@ void RepCutPartitioner::_parseKaHyParResult()
         auto tok = tv.next();
         if (tok.empty()) {
             rcp_log(log_level, REPCUT_LOG_ERROR, "Empty partition id at line %u\n", lineno);
-            exit(-1);
+            return false;
         }
         std::string buf(tok); // strtol needs NUL-terminated
         char* end = nullptr;
@@ -150,7 +153,7 @@ void RepCutPartitioner::_parseKaHyParResult()
         if (errno != 0 || end == buf.c_str() || *end != '\0') {
             rcp_log(log_level, REPCUT_LOG_ERROR, "Invalid partition id at line %u: '%.*s'\n", lineno,
                     static_cast<int>(tok.size()), tok.data());
-            exit(-1);
+            return false;
         }
         int32_t pid = static_cast<int32_t>(pid_long);
         // cone ${lineno} is assigned to partition ${pid}
@@ -160,10 +163,10 @@ void RepCutPartitioner::_parseKaHyParResult()
 
         lineno++;
     }
+    return true;
 }
 
-// Reconstruct per-partition DAG node sets: BFS upstream from each partition's sinks.
-void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
+bool RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Reconstruct partitions\n");
     auto start = std::chrono::system_clock::now();
@@ -220,9 +223,10 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     rcp_log(log_level, REPCUT_LOG_INFO, "Reconstruct: Done in %llums\n", duration.count());
+    return true;
 }
 
-void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
+bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "RepCut Partitioner: Start\n");
     auto start = std::chrono::system_clock::now();
@@ -230,25 +234,26 @@ void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     this->desired_parts = nparts;
 
     // 1. Collapse DAG to cluster graph and write hMetis file.
-    _buildAndWriteHmetis(dag);
+    if (!_buildAndWriteHmetis(dag)) return false;
 
     this->mtkahypar_output_filename =
         std::format("{}.part{}.epsilon{}.seed{}.KaHyPar", hmetis_path.filename().string(), this->desired_parts,
                     this->kahypar_imbalance_factor, this->kahypar_seed);
 
     // 2. Call MtKaHyPar on the written hMetis file.
-    _callMtKaHyPar();
+    if (!_callMtKaHyPar()) return false;
 
     // 3. Parse MtKaHyPar's output into coneIdToPartId / partIdToConeId.
-    _parseKaHyParResult();
+    if (!_parseKaHyParResult()) return false;
 
     // 4. Reconstruct per-partition DAG node sets (upstream BFS).
-    _reconstruct(dag);
+    if (!_reconstruct(dag)) return false;
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
     rcp_log(log_level, REPCUT_LOG_INFO, "RepCut Partitioner: Done in %llums\n", time_ms);
+    return true;
 }
 
 std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph& dag)
