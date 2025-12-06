@@ -340,11 +340,19 @@ void RepCutPartitioner::saveToFile(const char* filename) {
 
     auto ofs = std::ofstream(work_directory + "/" + filename);
 
+    // Build each partition's line in a reused std::string via std::to_string
+    // + append, then write it in one ofs << line.  Avoids per-integer
+    // operator<< overhead (locale-aware num_put) on designs with millions
+    // of node ids.  Same pattern as ClusterGraph::writeHMetisFile.
+    std::string line;
     for (uint32_t pid = 0; pid < partitions.size(); pid++) {
-        for (auto& sg_id : this->partitions[pid]) {
-            ofs << sg_id << ',';
+        line.clear();
+        for (auto sg_id : this->partitions[pid]) {
+            line += std::to_string(sg_id);
+            line += ',';
         }
-        ofs << "\n";
+        line += '\n';
+        ofs << line;
     }
 
     ofs.close();
