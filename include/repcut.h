@@ -42,6 +42,14 @@ struct RepCutContext {
     int          parallel_threads;      // default 1 (only 1 is deterministic for MtKaHyPar)
     int          seed;                 // -1 = MtKaHyPar picks
     enum RepCutLogLevel log_level;     // default SILENT
+
+    // MtKaHyPar binary to invoke as a subprocess.  If NULL, librepcut
+    // searches $PATH for "MtKaHyPar".  If non-NULL, the value is used
+    // verbatim (may be an absolute path or a name resolved via $PATH).
+    // In both cases the binary is verified to exist and be executable
+    // before the design graph is traversed, so a missing binary fails
+    // fast with an explicit error rather than mid-run.
+    const char* mtkahypar_bin;
 };
 
 // Aggregated partitioning statistics.  Optional out-parameter of repcut_run;

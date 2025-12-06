@@ -23,6 +23,9 @@ public:
     int seed = -1;
     // Verbosity count from -v / -vv.  0 = silent, 1 = info, 2 = debug.
     int verbosity = 0;
+    // Optional MtKaHyPar binary path.  If empty, librepcut searches $PATH
+    // for "MtKaHyPar".
+    std::string mtkahypar_bin;
 
     bool check();
 };

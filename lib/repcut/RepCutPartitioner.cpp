@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <format>
 #include <iostream>
@@ -24,6 +25,44 @@
 #include "process.hpp"
 
 using namespace repcut;
+
+namespace fs = std::filesystem;
+
+// Verify and resolve the MtKaHyPar binary before any expensive work.
+// Spawns `<bin> --version` (or `MtKaHyPar --version` if `bin` is null) and
+// checks the exit status.  A zero (or any non-127-style) exit confirms the
+// binary exists, is executable, and can run on this host.  Resolved binary
+// name is cached in `mtkahypar_bin_resolved` for later use by _callMtKaHyPar.
+bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin) {
+    const std::string resolved = (bin != nullptr && bin[0] != '\0')
+        ? std::string(bin)
+        : std::string("MtKaHyPar");
+
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "Verifying MtKaHyPar binary: %s\n", resolved.c_str());
+
+    std::vector<std::string> args;
+    args.push_back(resolved);
+    args.push_back("--version");
+
+    // Discard the child's stdout/stderr (only the exit status matters).
+    // If the binary doesn't exist, exec will fail in the child and the
+    // process returns a non-zero exit code.
+    auto noop = [](const char*, size_t) {};
+    TinyProcessLib::Process proc(args, "", noop, noop, false);
+    const auto rc = proc.get_exit_status();
+
+    if (rc != 0) {
+        rcp_log(log_level, REPCUT_LOG_ERROR,
+                 "MtKaHyPar binary '%s' not found or not usable (exit code %ld). "
+                 "Set ctx.mtkahypar_bin to the MtKaHyPar executable, or install it on $PATH.\n",
+                 resolved.c_str(), static_cast<long>(rc));
+        return false;
+    }
+
+    mtkahypar_bin_resolved = resolved;
+    rcp_log(log_level, REPCUT_LOG_DEBUG, "MtKaHyPar binary verified: %s\n", resolved.c_str());
+    return true;
+}
 
 
 // Build the cluster graph from the design DAG and stream it to an hMetis
@@ -44,10 +83,11 @@ void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag) {
 void RepCutPartitioner::_callMtKaHyPar() {
     rcp_log(log_level, REPCUT_LOG_INFO, "Call MtKaHyPar\n");
     assert(this->parallel_threads > 0);
+    assert(!mtkahypar_bin_resolved.empty() && "prepareMtKaHyParBin must be called before _callMtKaHyPar");
 
     std::vector<std::string> args;
 
-    args.push_back(this->mtkahypar_cmd);
+    args.push_back(mtkahypar_bin_resolved);
 
     args.push_back("-t");
     args.push_back(std::to_string(this -> parallel_threads));

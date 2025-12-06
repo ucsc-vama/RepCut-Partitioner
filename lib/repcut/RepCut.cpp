@@ -84,6 +84,15 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
         }
     } guard{lock_path};
 
+    // ---- Early MtKaHyPar sanity check, before traversing the graph ----
+    // Fails fast if the binary is missing so the user doesn't wait through
+    // the DAG parse + cluster collapse just to learn the binary isn't there.
+    auto rcp = std::make_unique<repcut::RepCutPartitioner>();
+    rcp->log_level = ll;
+    if (!rcp->prepareMtKaHyParBin(ctx->mtkahypar_bin)) {
+        return 1;
+    }
+
     // ---- Build DAG ----
     auto dag = std::make_unique<repcut::DirectedAcyclicGraph>();
     dag->log_level = ll;
@@ -91,12 +100,10 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
     dag->findSinkNodes();
 
     // ---- Run partitioner ----
-    auto rcp = std::make_unique<repcut::RepCutPartitioner>();
     rcp->kahypar_imbalance_factor = ctx->target_ib;
     rcp->cluster_parallel_threads = ctx->parallel_threads;
     rcp->parallel_threads = ctx->parallel_threads;
     rcp->kahypar_seed = ctx->seed;
-    rcp->log_level = ll;
     rcp->set_work_directory(ctx->work_directory);
     rcp->partition(*dag, ctx->nparts);
 

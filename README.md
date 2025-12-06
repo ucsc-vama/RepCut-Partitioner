@@ -59,6 +59,11 @@ is not invoked, so Boost need not be installed on the build machine.
                        Set a fixed value (along with `--threads 1`) for
                        reproducible partitioning runs.
 
+`--mtkahypar_bin arg`  path to the MtKaHyPar binary.  If omitted, `rcp` searches
+                       `$PATH` for `MtKaHyPar`.  The binary is verified to exist
+                       and run before any graph traversal, so a missing binary
+                       fails fast with an explicit error.
+
 `--log_level arg`      log level: `silent`, `error`, `warn`, `info`, `debug`.
 
 `-v` / `-vv`           shorthand for `--log_level info` / `--log_level debug`.
@@ -93,6 +98,10 @@ int repcut_run(const struct RepCutContext* ctx,
 - Reentrant: may be called concurrently from multiple threads **only if**
   each call uses a distinct `work_directory`. A `.lock` file is used as a
   concurrent-use safeguard.
+- `ctx->mtkahypar_bin`: if NULL, `librepcut` searches `$PATH` for `MtKaHyPar`;
+  if non-NULL, used verbatim. The binary is verified (run with `--version`)
+  before any graph traversal, so a missing/unusable binary fails fast with
+  an explicit error rather than mid-run.
 - By default writes nothing to stderr on success; errors always print.
   Info/debug output is gated by `ctx->log_level`.
 - Per-partition statistics are available via the optional `stats_out`

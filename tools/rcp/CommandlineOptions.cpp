@@ -15,6 +15,8 @@ bool parse_commandline_options(int argc, char** argv) {
             ("target_ib", po::value<float>()->default_value(0.03f), "target imbalance factor, default 0.03")
             ("threads", po::value<int>(), "parallel threads pass to MtKaHyPar (only --threads 1 is deterministic)")
             ("seed", po::value<int>(), "seed pass to MtKaHyPar (-1 = MtKaHyPar default)")
+            ("mtkahypar_bin", po::value<std::string>(),
+             "path to the MtKaHyPar binary (default: search $PATH for MtKaHyPar)")
             ("verbose,v", po::value<int>()->implicit_value(1)->zero_tokens(),
              "increase verbosity (-v = info, -vv = debug)")
             ;
@@ -64,6 +66,10 @@ bool parse_commandline_options(int argc, char** argv) {
 
     if (vm.count("verbose")) {
         opts.verbosity = vm["verbose"].as<int>();
+    }
+
+    if (vm.count("mtkahypar_bin")) {
+        opts.mtkahypar_bin = vm["mtkahypar_bin"].as<std::string>();
     }
 
     return opts.check();

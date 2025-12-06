@@ -29,10 +29,11 @@ namespace repcut {
         fs::path hmetis_path;
         // Output filename produced by MtKaHyPar.
         fs::path mtkahypar_output_filename;
+        // Resolved MtKaHyPar binary path (set by prepareMtKaHyParBin).
+        std::string mtkahypar_bin_resolved;
 
     public:
         // Parameters.
-        std::string mtkahypar_cmd = "MtKaHyPar";
         float kahypar_imbalance_factor = 0.015;
         int32_t kahypar_seed = -1;
         uint32_t desired_parts = 0;
@@ -44,6 +45,13 @@ namespace repcut {
 
         // Log threshold carried from RepCutContext.
         RepCutLogLevel log_level = REPCUT_LOG_SILENT;
+
+        // Verify and resolve the MtKaHyPar binary.  If `bin` is non-NULL it
+        // is used verbatim; otherwise $PATH is searched for "MtKaHyPar".  The
+        // binary is run with --version to confirm it exists and is executable
+        // before any expensive graph traversal work begins.  Returns true on
+        // success; on failure logs an explicit error and returns false.
+        bool prepareMtKaHyParBin(const char* bin);
 
         // Result: cone (sink) → partition id, as reported by MtKaHyPar.
         std::vector<uint32_t> coneIdToPartId;
@@ -57,7 +65,8 @@ namespace repcut {
         // partition count, run the full RepCut pipeline (collapse to cluster
         // graph, write hMetis, call MtKaHyPar, parse result, reconstruct
         // per-partition DAG node sets via upstream BFS).  Fills `partitions`
-        // and `coneIdToPartId`.
+        // and `coneIdToPartId`.  Requires prepareMtKaHyParBin() to have been
+        // called successfully beforehand.
         void partition(DirectedAcyclicGraph& dag, const int nparts);
 
         // Compute statistics over `partitions` against the design DAG.
