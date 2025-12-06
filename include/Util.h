@@ -1,9 +1,4 @@
-//
-// Created by Haoyuan Wang on 11/14/22.
-//
-
-#ifndef RCP_UTIL_H
-#define RCP_UTIL_H
+#pragma once
 
 #include <cstdint>
 #include <vector>
@@ -12,11 +7,8 @@ namespace repcut {
     float calculate_ib_factor(std::vector<uint32_t>& dat);
     float calculate_ib_factor(std::vector<float>& dat);
 
-    // Aggregated statistics for a partitioning result.  Reconstructed by
-    // RepCutPartitioner::reportPartitionStatus from the per-partition DAG
-    // node lists.
-    class PartitionStatistics {
-    public:
+    struct PartitionStatistics
+    {
         uint32_t nparts;
 
         float ib_factor_weight;
@@ -33,7 +25,4 @@ namespace repcut {
         float replication_rate_size;
         std::vector<uint32_t> partition_size;
     };
-}
-
-
-#endif //RCP_UTIL_H
+} // namespace repcut

@@ -11,8 +11,8 @@
 namespace fs = std::filesystem;
 namespace po = boost::program_options;
 
-
-class CommandlineOptions {
+class CommandlineOptions
+{
 public:
     std::string graph_filename;
     fs::path work_directory;
@@ -21,10 +21,9 @@ public:
     float target_ib = 0.03f;
     int parallel_threads = 1;
     int seed = -1;
-    // Verbosity count from -v / -vv.  0 = silent, 1 = info, 2 = debug.
+    // Verbosity (-v=info, -vv=debug).
     int verbosity = 0;
-    // Optional MtKaHyPar binary path.  If empty, librepcut searches $PATH
-    // for "MtKaHyPar".
+    // Optional MtKaHyPar binary path (empty = search $PATH).
     std::string mtkahypar_bin;
 
     bool check();
@@ -32,10 +31,5 @@ public:
 
 extern CommandlineOptions opts;
 
-// Parse argc/argv into the global `opts`.  Returns false on error or --help.
 bool parse_commandline_options(int argc, char** argv);
-
-// Translate the parsed CLI options into the library's RepCutLogLevel.
-// If --log_level is given explicitly it takes precedence; otherwise -v / -vv
-// determine the level; otherwise silent.
 RepCutLogLevel resolve_log_level();

@@ -1,7 +1,3 @@
-//
-// Created by Haoyuan Wang on 11/11/22.
-//
-
 #include "RepCutPartitioner.h"
 
 #include "ClusterGraph.h"
@@ -16,8 +12,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <sstream>
 #include <string>
@@ -29,15 +25,10 @@ using namespace repcut;
 
 namespace fs = std::filesystem;
 
-// Verify and resolve the MtKaHyPar binary before any expensive work.
-// Spawns `<bin> --version` (or `MtKaHyPar --version` if `bin` is null) and
-// checks the exit status.  A zero (or any non-127-style) exit confirms the
-// binary exists, is executable, and can run on this host.  Resolved binary
-// name is cached in `mtkahypar_bin_resolved` for later use by _callMtKaHyPar.
-bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin) {
-    const std::string resolved = (bin != nullptr && bin[0] != '\0')
-        ? std::string(bin)
-        : std::string("MtKaHyPar");
+// Verify MtKaHyPar binary exists before any expensive work.
+bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
+{
+    const std::string resolved = (bin != nullptr && bin[0] != '\0') ? std::string(bin) : std::string("MtKaHyPar");
 
     rcp_log(log_level, REPCUT_LOG_DEBUG, "Verifying MtKaHyPar binary: %s\n", resolved.c_str());
 
@@ -45,18 +36,16 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin) {
     args.push_back(resolved);
     args.push_back("--version");
 
-    // Discard the child's stdout/stderr (only the exit status matters).
-    // If the binary doesn't exist, exec will fail in the child and the
-    // process returns a non-zero exit code.
+    // Discard stdout/stderr (exit status is all that matters).
     auto noop = [](const char*, size_t) {};
     TinyProcessLib::Process proc(args, "", noop, noop, false);
     const auto rc = proc.get_exit_status();
 
     if (rc != 0) {
         rcp_log(log_level, REPCUT_LOG_ERROR,
-                 "MtKaHyPar binary '%s' not found or not usable (exit code %ld). "
-                 "Set ctx.mtkahypar_bin to the MtKaHyPar executable, or install it on $PATH.\n",
-                 resolved.c_str(), static_cast<long>(rc));
+                "MtKaHyPar binary '%s' not found or not usable (exit code %ld). "
+                "Set ctx.mtkahypar_bin to the MtKaHyPar executable, or install it on $PATH.\n",
+                resolved.c_str(), static_cast<long>(rc));
         return false;
     }
 
@@ -65,12 +54,9 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin) {
     return true;
 }
 
-
-// Build the cluster graph from the design DAG and stream it to an hMetis
-// file.  The cluster graph is stack-allocated and destroyed before
-// returning so its memory does not overlap with the MtKaHyPar call or the
-// reconstruction pass.
-void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag) {
+// Build cluster graph from DAG and write hMetis file.
+void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
+{
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
     ClusterGraph cluster_graph;
     cluster_graph.parallel_threads = cluster_parallel_threads;
@@ -81,7 +67,8 @@ void RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag) {
     cluster_graph.writeHMetisFile(hmetis_path.c_str());
 }
 
-void RepCutPartitioner::_callMtKaHyPar() {
+void RepCutPartitioner::_callMtKaHyPar()
+{
     rcp_log(log_level, REPCUT_LOG_INFO, "Call MtKaHyPar\n");
     assert(this->parallel_threads > 0);
     assert(!mtkahypar_bin_resolved.empty() && "prepareMtKaHyParBin must be called before _callMtKaHyPar");
@@ -91,17 +78,17 @@ void RepCutPartitioner::_callMtKaHyPar() {
     args.push_back(mtkahypar_bin_resolved);
 
     args.push_back("-t");
-    args.push_back(std::to_string(this -> parallel_threads));
+    args.push_back(std::to_string(this->parallel_threads));
     args.push_back("-h");
-    args.push_back(this -> hmetis_path.string());
+    args.push_back(this->hmetis_path.string());
     args.push_back("-k");
-    args.push_back(std::to_string(this -> desired_parts));
+    args.push_back(std::to_string(this->desired_parts));
     args.push_back("-e");
-    args.push_back(std::to_string(this -> kahypar_imbalance_factor));
+    args.push_back(std::to_string(this->kahypar_imbalance_factor));
     args.push_back("--preset-type");
     args.push_back("default");
     args.push_back("--seed");
-    args.push_back(std::to_string(this -> kahypar_seed));
+    args.push_back(std::to_string(this->kahypar_seed));
     args.push_back("--mode");
     args.push_back("direct");
     args.push_back("-o");
@@ -109,23 +96,19 @@ void RepCutPartitioner::_callMtKaHyPar() {
     args.push_back("--write-partition-file=true");
 
     std::ostringstream oss;
-    for (const auto &s: args) {
+    for (const auto& s : args) {
         oss << s << " ";
     }
     rcp_log(log_level, REPCUT_LOG_INFO, "MtKaHyPar cmd: %s\n", oss.str().c_str());
 
-    // Forward MtKaHyPar's stdout and stderr to our stderr only when the user
-    // asked for info/debug logging.
+    // Forward MtKaHyPar output only at info/debug log level.
     using Reader = std::function<void(const char*, size_t)>;
     auto noop = [](const char*, size_t) {};
     Reader fwd = [this](const char* bytes, size_t n) {
         rcp_log(log_level, REPCUT_LOG_INFO, "%.*s", static_cast<int>(n), bytes);
     };
     const bool verbose = rcp_should_log(log_level, REPCUT_LOG_INFO);
-    TinyProcessLib::Process kahypar_process(args, "",
-                                             verbose ? fwd : noop,
-                                             verbose ? fwd : noop,
-                                             false);
+    TinyProcessLib::Process kahypar_process(args, "", verbose ? fwd : noop, verbose ? fwd : noop, false);
     auto ret_code = kahypar_process.get_exit_status();
 
     if (ret_code != 0) {
@@ -134,15 +117,14 @@ void RepCutPartitioner::_callMtKaHyPar() {
     }
 }
 
-
-void RepCutPartitioner::_parseKaHyParResult() {
-    auto kahypar_output_fullpath = fs::path(work_directory) / this -> mtkahypar_output_filename;
+void RepCutPartitioner::_parseKaHyParResult()
+{
+    auto kahypar_output_fullpath = fs::path(work_directory) / this->mtkahypar_output_filename;
 
     auto file_status = fs::status(kahypar_output_fullpath);
     if (!fs::exists(file_status) || !fs::is_regular_file(file_status)) {
-        rcp_log(log_level, REPCUT_LOG_ERROR,
-                 "KaHyPar result file %s does not exist or is not a regular file!\n",
-                 kahypar_output_fullpath.c_str());
+        rcp_log(log_level, REPCUT_LOG_ERROR, "KaHyPar result file %s does not exist or is not a regular file!\n",
+                kahypar_output_fullpath.c_str());
         exit(-1);
     }
 
@@ -150,9 +132,9 @@ void RepCutPartitioner::_parseKaHyParResult() {
     std::string line;
     uint32_t lineno = 0;
 
-    this -> coneIdToPartId.clear();
-    this -> partIdToConeId.clear();
-    this -> partIdToConeId.assign(this -> desired_parts, std::vector<uint32_t>());
+    this->coneIdToPartId.clear();
+    this->partIdToConeId.clear();
+    this->partIdToConeId.assign(this->desired_parts, std::vector<uint32_t>());
 
     while (std::getline(kFile, line)) {
         TokenView tv(line);
@@ -161,35 +143,28 @@ void RepCutPartitioner::_parseKaHyParResult() {
             rcp_log(log_level, REPCUT_LOG_ERROR, "Empty partition id at line %u\n", lineno);
             exit(-1);
         }
-        std::string buf(tok);  // strtol needs NUL-terminated
+        std::string buf(tok); // strtol needs NUL-terminated
         char* end = nullptr;
         errno = 0;
         long pid_long = std::strtol(buf.c_str(), &end, 10);
         if (errno != 0 || end == buf.c_str() || *end != '\0') {
-            rcp_log(log_level, REPCUT_LOG_ERROR,
-                     "Invalid partition id at line %u: '%.*s'\n",
-                     lineno, static_cast<int>(tok.size()), tok.data());
+            rcp_log(log_level, REPCUT_LOG_ERROR, "Invalid partition id at line %u: '%.*s'\n", lineno,
+                    static_cast<int>(tok.size()), tok.data());
             exit(-1);
         }
         int32_t pid = static_cast<int32_t>(pid_long);
         // cone ${lineno} is assigned to partition ${pid}
         assert(pid < this->desired_parts);
-        this -> coneIdToPartId.push_back(pid);
-        this -> partIdToConeId[pid].push_back(lineno);
+        this->coneIdToPartId.push_back(pid);
+        this->partIdToConeId[pid].push_back(lineno);
 
         lineno++;
     }
 }
 
-// Reconstruct per-partition DAG node sets by BFS upstream from each sink
-// assigned to a partition.  A non-sink cluster touches cone c iff its nodes
-// are ancestors of sink(c), so {ancestors of sink(c) : coneIdToPartId[c] == pid}
-// is the set of nodes partition pid must simulate (replicated nodes appear
-// in multiple partitions exactly when their descendant cones span parts).
-//
-// `vis` (per-partition unordered_set) serves as both the BFS visited marker
-// and the dedup container; reused across partitions via clear().
-void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
+// Reconstruct per-partition DAG node sets: BFS upstream from each partition's sinks.
+void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
+{
     rcp_log(log_level, REPCUT_LOG_INFO, "Reconstruct partitions\n");
     auto start = std::chrono::system_clock::now();
 
@@ -226,9 +201,9 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
             const uint32_t v = fringe.back();
             fringe.pop_back();
 
-            // vis already contains v (we insert on push).  Skip invalid nodes
-            // but still keep them in vis so we don't re-traverse their edges.
-            if (!dag.valid[v]) continue;
+            // Skip invalid nodes (keep in vis to avoid re-traversing edges).
+            if (!dag.valid[v])
+                continue;
             part.push_back(v);
 
             for (const auto u : dag.inNeigh[v]) {
@@ -238,8 +213,7 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
             }
         }
 
-        // Match historical output order (ascending ids) so rcp_output.txt
-        // remains diffable against prior runs.
+        // Sort ascending for diffable output.
         std::sort(part.begin(), part.end());
     }
 
@@ -248,27 +222,19 @@ void RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag) {
     rcp_log(log_level, REPCUT_LOG_INFO, "Reconstruct: Done in %llums\n", duration.count());
 }
 
-void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts) {
+void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
+{
     rcp_log(log_level, REPCUT_LOG_INFO, "RepCut Partitioner: Start\n");
     auto start = std::chrono::system_clock::now();
 
-    this -> desired_parts = nparts;
+    this->desired_parts = nparts;
 
-    // 1. Collapse DAG to cluster graph and write hMetis file (frees the
-    //    cluster graph before returning).
+    // 1. Collapse DAG to cluster graph and write hMetis file.
     _buildAndWriteHmetis(dag);
 
-    // Output filename MtKaHyPar will produce.  Format must match what the
-    // MtKaHyPar binary writes for the given hmetis input.
-    // MtKaHyPar's output filename mirrors its input filename with the partition
-// parameters appended.  Matches the historical boost::format template
-// "%1%.part%2%.epsilon%3%.seed%4%.KaHyPar".
-    this -> mtkahypar_output_filename = std::format(
-        "{}.part{}.epsilon{}.seed{}.KaHyPar",
-        hmetis_path.filename().string(),
-        this->desired_parts,
-        this->kahypar_imbalance_factor,
-        this->kahypar_seed);
+    this->mtkahypar_output_filename =
+        std::format("{}.part{}.epsilon{}.seed{}.KaHyPar", hmetis_path.filename().string(), this->desired_parts,
+                    this->kahypar_imbalance_factor, this->kahypar_seed);
 
     // 2. Call MtKaHyPar on the written hMetis file.
     _callMtKaHyPar();
@@ -285,7 +251,8 @@ void RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts) {
     rcp_log(log_level, REPCUT_LOG_INFO, "RepCut Partitioner: Done in %llums\n", time_ms);
 }
 
-std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph& dag) {
+std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(DirectedAcyclicGraph& dag)
+{
     assert(!this->partitions.empty());
 
     auto ret = std::make_unique<PartitionStatistics>();
@@ -334,16 +301,14 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
     return ret;
 }
 
-void RepCutPartitioner::saveToFile(const char* filename) {
+void RepCutPartitioner::saveToFile(const char* filename)
+{
     rcp_log(log_level, REPCUT_LOG_INFO, "Write to output file: Start\n");
     auto start = std::chrono::system_clock::now();
 
     auto ofs = std::ofstream(work_directory + "/" + filename);
 
-    // Build each partition's line in a reused std::string via std::to_string
-    // + append, then write it in one ofs << line.  Avoids per-integer
-    // operator<< overhead (locale-aware num_put) on designs with millions
-    // of node ids.  Same pattern as ClusterGraph::writeHMetisFile.
+    // Reuse std::string to avoid per-integer operator<< overhead.
     std::string line;
     for (uint32_t pid = 0; pid < partitions.size(); pid++) {
         line.clear();

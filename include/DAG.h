@@ -7,21 +7,15 @@
 
 namespace repcut {
 
-    // Flat representation of the design DAG.  Replaces the earlier
-    // boost::adjacency_list<bidirectionalS> storage with plain vectors.
-    // The graph is append-only during `buildFromFile` and frozen thereafter,
-    // so a CSR-like layout is sufficient and far lighter than BGL.
-    class DirectedAcyclicGraph {
+    // Flat CSR-like representation of the design DAG.
+    class DirectedAcyclicGraph
+    {
     public:
         // Per-vertex properties, indexed by vertex id.
-        std::vector<float> weight;       // numVertices; 0 for invalid nodes
-        std::vector<bool>  valid;        // numVertices
+        std::vector<float> weight; // numVertices; 0 for invalid nodes
+        std::vector<bool> valid;   // numVertices
 
-        // Adjacency, indexed by vertex id.  Both directions are kept because
-        // cone-marking and reconstruction walk predecessors (inNeigh) while
-        // cluster flooding needs both directions for connected-component
-        // grouping.  Insertion order in these vectors matches the order edges
-        // appear in the input file, which is deterministic.
+        // Adjacency (both directions kept for cone-marking and flood fill).
         std::vector<std::vector<uint32_t>> inNeigh;
         std::vector<std::vector<uint32_t>> outNeigh;
 
@@ -36,4 +30,4 @@ namespace repcut {
 
         size_t numVertices() const { return weight.size(); }
     };
-}
+} // namespace repcut
