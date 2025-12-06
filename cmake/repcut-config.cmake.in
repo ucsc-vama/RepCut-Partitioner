@@ -1,8 +1,4 @@
 # repcut-config.cmake — generated install-side dependencies.
-#
-# Consumers do `find_package(repcut CONFIG REQUIRED)` and link against
-# `repcut::repcut`.  This file ensures the transitive runtime dependencies
-# (pthreads via tiny-process-library) are found on the consumer's machine.
 
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
