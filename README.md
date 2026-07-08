@@ -31,22 +31,21 @@ library (`librepcut`) suitable for embedding into other simulators/tools.
 
 ## Default: CLI tool + library
 
-> mkdir install
-> mkdir build && cd build
-> cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install
+> mkdir install \
+> mkdir build && cd build \
+> cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install \
 > make install
 
 Installs `install/bin/rcp` (the CLI tool) and `install/lib/librepcut.a`.
 
 ## Library only (no Boost required)
 
-> mkdir install
-> mkdir build && cd build
-> cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install -DRCP_BUILD_CLI=OFF
+> mkdir install \
+> mkdir build && cd build \
+> cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install -DRCP_BUILD_CLI=OFF \
 > make install
 
-Installs only `install/lib/librepcut.a` (plus headers). `find_package(Boost)`
-is not invoked, so Boost need not be installed on the build machine.
+Installs only `install/lib/librepcut.a` (plus headers).
 
 # Command Line Options
 
@@ -70,24 +69,20 @@ is not invoked, so Boost need not be installed on the build machine.
                        reproducible partitioning runs.
 
 `--mtkahypar_bin arg`  path to the MtKaHyPar binary.  If omitted, `rcp` searches
-                       `$PATH` for `MtKaHyPar`.  The binary is verified to exist
-                       and run before any graph traversal, so a missing binary
-                       fails fast with an explicit error.
+                       `$PATH` for `MtKaHyPar`.
 
 `--log_level arg`      log level: `silent`, `error`, `warn`, `info`, `debug`.
 
 `-v` / `-vv`           shorthand for `--log_level info` / `--log_level debug`.
 
-By default the tool is silent on success and prints errors to stderr.
-Info/debug logs go to stderr; partition statistics (on success) go to stdout.
 
 ## On `--target_ib` (imbalance target)
 
 RepCut asks MtKaHyPar to do two things:
 
 1. **Balance partition size** — controlled by `--target_ib` (the ε passed to
-   MtKaHyPar).  Partitions are guaranteed to deviate from the average by at
-   most a factor of ε.
+   MtKaHyPar).  MtKaHyPar tries to constraint deviate from the average by at
+   most a factor of ε. (Depending on input graph, this target may be impossible)
 2. **Minimize replication** — the km1 objective.  Replication is what breaks
    intra-cycle dependences between partitions, but it also adds work.
 
@@ -106,7 +101,7 @@ the looser balance target on the proxy hypergraph.
 
 In short:
 
-- The right value of `--target_ib` depends on the input graph.
+- The best value of `--target_ib` depends on the input graph.
 - `0.03` is simply MtKaHyPar's default and is **likely too small** for many
   RepCut inputs.
 - If your partition stats show a high duplication cost, try a larger value
@@ -115,10 +110,6 @@ In short:
 ## Example
 
 To partition `rocket21-1c.graph` into 4 partitions with info-level logging:
-
-> rcp --graph_file ./example/rocket21-1c.graph --work_directory ~/tmp --nparts 4 -v
-
-To reproduce a run exactly:
 
 > rcp --graph_file ./example/rocket21-1c.graph --work_directory ~/tmp --nparts 4 --threads 1 --seed 42
 
