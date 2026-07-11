@@ -13,7 +13,6 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <format>
 #include <functional>
 #include <sstream>
 #include <string>
@@ -234,9 +233,12 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     // 1. Collapse DAG to cluster graph and write hMetis file.
     if (!_buildAndWriteHmetis(dag)) return false;
 
-    this->mtkahypar_output_filename =
-        std::format("{}.part{}.epsilon{}.seed{}.KaHyPar", hmetis_path.filename().string(), this->desired_parts,
-                    this->kahypar_imbalance_factor, this->kahypar_seed);
+    {
+        std::ostringstream oss;
+        oss << hmetis_path.filename().string() << ".part" << this->desired_parts << ".epsilon"
+            << this->kahypar_imbalance_factor << ".seed" << this->kahypar_seed << ".KaHyPar";
+        this->mtkahypar_output_filename = oss.str();
+    }
 
     // 2. Call MtKaHyPar on the written hMetis file.
     if (!_callMtKaHyPar()) return false;
