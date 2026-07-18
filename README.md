@@ -19,7 +19,7 @@ library (`librepcut`) suitable for embedding into other simulators/tools.
 
 # Requirements & Dependencies
 
-1. Compiler that supports C++20
+1. Compiler that supports C++17
 2. `boost::program_options` — only needed when building the `rcp` CLI tool.
    `librepcut` itself has zero Boost dependency (it links only the vendored
    [`tiny-process-library`](https://gitlab.com/eidheim/tiny-process-library)
