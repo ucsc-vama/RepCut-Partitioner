@@ -8,6 +8,7 @@
 #include <deque>
 #include <utility>
 #include <vector>
+#include <cstddef>
 
 namespace repcut {
 
