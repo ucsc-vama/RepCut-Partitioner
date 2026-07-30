@@ -28,7 +28,7 @@ namespace fs = std::filesystem;
 // Verify MtKaHyPar binary exists before any expensive work.
 bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
 {
-    const std::string resolved = (bin != nullptr && bin[0] != '\0') ? std::string(bin) : std::string("MtKaHyPar");
+    std::string resolved = (bin != nullptr && bin[0] != '\0') ? std::string(bin) : std::string("MtKaHyPar");
 
     rcp_log(log_level, REPCUT_LOG_DEBUG, "Verifying MtKaHyPar binary: %s\n", resolved.c_str());
 
@@ -39,12 +39,20 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
     // Discard stdout/stderr (exit status is all that matters).
     auto noop = [](const char*, size_t) {};
     TinyProcessLib::Process proc(args, "", noop, noop, false);
-    const auto rc = proc.get_exit_status();
+    int rc = proc.get_exit_status();
+
+    // Retry with lowercase spelling
+    if (rc != 0) {
+      resolved = std::string("mtkahypar");
+      args[0] = resolved;
+      TinyProcessLib::Process proc_lower(args, "", noop, noop, false);
+      rc = proc_lower.get_exit_status();
+    }
 
     if (rc != 0) {
         rcp_log(log_level, REPCUT_LOG_ERROR,
                 "MtKaHyPar binary '%s' not found or not usable (exit code %ld). "
-                "Set ctx.mtkahypar_bin to the MtKaHyPar executable, or install it on $PATH.\n",
+                "Set --mtkahypar_bin flag to the MtKaHyPar executable, or install it on $PATH.\n",
                 resolved.c_str(), static_cast<long>(rc));
         return false;
     }
