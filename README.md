@@ -2,7 +2,7 @@
 
 A C++ implementation of the RepCut partitioner from *RepCut: Superlinear
 Parallel RTL Simulation with Replication-Aided Partitioning* (Wang & Beamer,
-ASPLOS 2023).
+ASPLOS 2023). The partitioner use useful for partitioning a DAG for parallel RTL simulation because it eliminates inter-partition edges via modest amounts of replication. Thus, parallel components only need to communicate once per simulated cycle.
 
 ```bibtex
 @inproceedings{wang2023repcut,
@@ -20,12 +20,11 @@ library (`librepcut`) suitable for embedding into other simulators/tools.
 # Requirements & Dependencies
 
 1. Compiler that supports C++17
-2. `boost::program_options` — only needed when building the `rcp` CLI tool.
+2. [MtKaHyPar](https://github.com/kahypar/mt-kahypar) - must be accessible via `$PATH` or specified
+3. `boost::program_options` — only needed when building the `rcp` CLI tool.
    `librepcut` itself has zero Boost dependency (it links only the vendored
    [`tiny-process-library`](https://gitlab.com/eidheim/tiny-process-library)
    sources, which are included in-tree under `external/tiny-process-library/`).
-
-`MtKaHyPar` binary directory must be in `$PATH` or specified.
 
 # Build
 
@@ -112,6 +111,8 @@ In short:
 To partition `rocket21-1c.graph` into 4 partitions with info-level logging:
 
 > rcp --graph_file ./example/rocket21-1c.graph --work_directory ~/tmp --nparts 4 --threads 1 --seed 42
+
+Please note a work directory is required, so for the example, you would need to make `~/tmp`.
 
 ## Output
 
