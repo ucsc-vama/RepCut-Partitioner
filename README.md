@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ucsc-vama/RepCut-Partitioner)
+
 # RepCut Partitioner
 
 A C++ implementation of the RepCut partitioner from *RepCut: Superlinear
