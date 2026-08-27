@@ -43,10 +43,10 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
 
     // Retry with lowercase spelling
     if (rc != 0) {
-      resolved = std::string("mtkahypar");
-      args[0] = resolved;
-      TinyProcessLib::Process proc_lower(args, "", noop, noop, false);
-      rc = proc_lower.get_exit_status();
+        resolved = std::string("mtkahypar");
+        args[0] = resolved;
+        TinyProcessLib::Process proc_lower(args, "", noop, noop, false);
+        rc = proc_lower.get_exit_status();
     }
 
     if (rc != 0) {
@@ -240,7 +240,8 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     this->desired_parts = nparts;
 
     // 1. Collapse DAG to cluster graph and write hMetis file.
-    if (!_buildAndWriteHmetis(dag)) return false;
+    if (!_buildAndWriteHmetis(dag))
+        return false;
 
     {
         std::ostringstream oss;
@@ -250,13 +251,16 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     }
 
     // 2. Call MtKaHyPar on the written hMetis file.
-    if (!_callMtKaHyPar()) return false;
+    if (!_callMtKaHyPar())
+        return false;
 
     // 3. Parse MtKaHyPar's output into coneIdToPartId / partIdToConeId.
-    if (!_parseKaHyParResult()) return false;
+    if (!_parseKaHyParResult())
+        return false;
 
     // 4. Reconstruct per-partition DAG node sets (upstream BFS).
-    if (!_reconstruct(dag)) return false;
+    if (!_reconstruct(dag))
+        return false;
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -304,16 +308,14 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
 
     ret->total_part_size = total_part_size;
     ret->replication_size = ret->total_part_size - ret->sg_size;
-    ret->replication_rate_size = (ret->sg_size > 0)
-        ? static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size
-        : 0.0f;
+    ret->replication_rate_size =
+        (ret->sg_size > 0) ? static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size : 0.0f;
     ret->ib_factor_size = calculate_ib_factor(ret->partition_size);
 
     ret->total_part_weight = total_part_weight;
     ret->replication_weight = ret->total_part_weight - ret->sg_weight;
-    ret->replication_rate_weight = (ret->sg_weight != 0.0f)
-        ? static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight
-        : 0.0f;
+    ret->replication_rate_weight =
+        (ret->sg_weight != 0.0f) ? static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight : 0.0f;
     ret->ib_factor_weight = calculate_ib_factor(ret->partition_weights);
 
     return ret;

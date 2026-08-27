@@ -2,9 +2,9 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cctype>
 #include <cerrno>
+#include <cstddef>
 #include <string_view>
 
 namespace repcut {

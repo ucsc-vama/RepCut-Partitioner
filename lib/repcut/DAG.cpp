@@ -23,8 +23,8 @@ static bool parse_uint(std::string_view tok, uint32_t lineno, const char* what, 
     errno = 0;
     long v = std::strtol(buf.c_str(), &end, 10);
     if (errno != 0 || end == buf.c_str() || *end != '\0' || v < 0) {
-        rcp_log(ll, REPCUT_LOG_ERROR, "Invalid %s at line %u: '%.*s'\n", what, lineno,
-                static_cast<int>(tok.size()), tok.data());
+        rcp_log(ll, REPCUT_LOG_ERROR, "Invalid %s at line %u: '%.*s'\n", what, lineno, static_cast<int>(tok.size()),
+                tok.data());
         return false;
     }
     out = static_cast<uint32_t>(v);
@@ -38,8 +38,8 @@ static bool parse_float(std::string_view tok, uint32_t lineno, const char* what,
     errno = 0;
     float v = std::strtof(buf.c_str(), &end);
     if (errno != 0 || end == buf.c_str() || *end != '\0') {
-        rcp_log(ll, REPCUT_LOG_ERROR, "Invalid %s at line %u: '%.*s'\n", what, lineno,
-                static_cast<int>(tok.size()), tok.data());
+        rcp_log(ll, REPCUT_LOG_ERROR, "Invalid %s at line %u: '%.*s'\n", what, lineno, static_cast<int>(tok.size()),
+                tok.data());
         return false;
     }
     out = v;
@@ -67,8 +67,10 @@ bool DirectedAcyclicGraph::buildFromFile(const char* filename)
                 return false;
             }
             uint32_t numEdges = 0, numNodes = 0;
-            if (!parse_uint(a, lineno, "numEdges", log_level, numEdges)) return false;
-            if (!parse_uint(b, lineno, "numNodes", log_level, numNodes)) return false;
+            if (!parse_uint(a, lineno, "numEdges", log_level, numEdges))
+                return false;
+            if (!parse_uint(b, lineno, "numNodes", log_level, numNodes))
+                return false;
             (void)numEdges; // parsed for format compatibility
 
             weight.resize(numNodes);
@@ -87,7 +89,8 @@ bool DirectedAcyclicGraph::buildFromFile(const char* filename)
 
             uint32_t node_id = lineno - 1;
             float node_weight = 0;
-            if (!parse_float(weight_tok, lineno, "node weight", log_level, node_weight)) return false;
+            if (!parse_float(weight_tok, lineno, "node weight", log_level, node_weight))
+                return false;
 
             if (node_weight < 0) {
                 weight[node_id] = 0;
@@ -100,7 +103,8 @@ bool DirectedAcyclicGraph::buildFromFile(const char* filename)
                 while (!tv.done()) {
                     auto tok = tv.next();
                     uint32_t dst = 0;
-                    if (!parse_uint(tok, lineno, "node id", log_level, dst)) return false;
+                    if (!parse_uint(tok, lineno, "node id", log_level, dst))
+                        return false;
                     outNeigh[node_id].push_back(dst);
                     inNeigh[dst].push_back(node_id);
                 }

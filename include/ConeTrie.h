@@ -4,11 +4,11 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <utility>
 #include <vector>
-#include <cstddef>
 
 namespace repcut {
 
