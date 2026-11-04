@@ -78,6 +78,14 @@ Installs only `install/lib/librepcut.a` (plus headers).
 
 ## On `--target_ib` (imbalance target)
 
+When the cone-overlap hypergraph has no edges, the cones are independent.
+RepCut assigns whole cones in descending weight order to the least-loaded
+partition, breaking ties by cone and partition id. This skips MtKaHyPar's
+partitioning call; the early binary availability check still applies. The
+existing hypergraph weights, including their positive floor, are used. This
+greedy balance is not guaranteed to meet `--target_ib`, especially when one
+cone is much heavier than the others. No replication is needed in this case.
+
 RepCut asks MtKaHyPar to do two things:
 
 1. **Balance partition size** — controlled by `--target_ib` (the ε passed to
@@ -174,3 +182,15 @@ mandatory and should not contain spaces. Consecutive spaces between fields
 are tolerated by the parser.
 
 An example graph file is under the `example/` directory.
+
+# Tests
+
+The independent-cone regression uses a guarded MtKaHyPar stub to check that
+edgeless hypergraphs bypass partitioning, while shared dependencies still
+invoke the external tool and propagate its failures. Python 3 is required:
+
+```sh
+python3 tests/test_edgeless.py --rcp build/tools/rcp/rcp --work-directory build/test-edgeless
+```
+
+Generated graphs, memberships and logs remain in the selected work directory.

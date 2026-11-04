@@ -15,9 +15,12 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <numeric>
+#include <queue>
 #include <sstream>
 #include <string>
 #include <unordered_set>
+#include <utility>
 
 #include "process.hpp"
 
@@ -54,8 +57,9 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
     return true;
 }
 
-// Build cluster graph from DAG and write hMetis file.
-bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
+// Build cluster graph from DAG and write hMetis file. When no clusters are
+// shared between cones, return their weights for direct load balancing.
+bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag, std::vector<uint32_t>& independent_weights)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
     ClusterGraph cluster_graph;
@@ -64,7 +68,47 @@ bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag)
 
     hmetis_path = fs::path(work_directory) / "parts.hmetis";
     cluster_graph.writeHMetisFile(hmetis_path.c_str());
+    independent_weights.clear();
+    if (cluster_graph.clusters.size() == cluster_graph.sinkNodes.size()) {
+        independent_weights.reserve(cluster_graph.nodeWeight.size());
+        for (const float weight : cluster_graph.nodeWeight) {
+            // Match the positive integer weights written to the hypergraph.
+            independent_weights.push_back(static_cast<uint32_t>(weight));
+        }
+    }
     return true;
+}
+
+// An edgeless cone-overlap hypergraph has no replication cost to minimize.
+// Balance whole cones using longest-processing-time-first scheduling; splitting
+// raw DAG nodes here would break the dependency closure of each partition.
+void RepCutPartitioner::_partitionIndependentCones(const std::vector<uint32_t>& weights)
+{
+    rcp_log(log_level, REPCUT_LOG_INFO, "Balance %zu independent cones across %u partitions\n", weights.size(),
+            desired_parts);
+
+    std::vector<uint32_t> order(weights.size());
+    std::iota(order.begin(), order.end(), uint32_t{0});
+    std::sort(order.begin(), order.end(), [&](uint32_t lhs, uint32_t rhs) {
+        return weights[lhs] != weights[rhs] ? weights[lhs] > weights[rhs] : lhs < rhs;
+    });
+
+    // Wide loads avoid overflow when summing many node weights. Partition id
+    // breaks equal-load ties, keeping assignments deterministic.
+    using Load = std::pair<uint64_t, uint32_t>;
+    std::priority_queue<Load, std::vector<Load>, std::greater<Load>> loads;
+    for (uint32_t pid = 0; pid < desired_parts; ++pid) {
+        loads.emplace(0, pid);
+    }
+    coneIdToPartId.assign(weights.size(), 0);
+    partIdToConeId.assign(desired_parts, {});
+    for (const uint32_t cone : order) {
+        const auto [weight, pid] = loads.top();
+        loads.pop();
+        coneIdToPartId[cone] = pid;
+        partIdToConeId[pid].push_back(cone);
+        loads.emplace(weight + weights[cone], pid);
+    }
 }
 
 bool RepCutPartitioner::_callMtKaHyPar()
@@ -232,20 +276,29 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     this->desired_parts = nparts;
 
     // 1. Collapse DAG to cluster graph and write hMetis file.
-    if (!_buildAndWriteHmetis(dag)) return false;
+    std::vector<uint32_t> independent_weights;
+    if (!_buildAndWriteHmetis(dag, independent_weights))
+        return false;
 
-    {
+    if (!independent_weights.empty()) {
+        // Disjoint cones have no cut to optimize. Retain the ordinary
+        // reconstruction path after balancing their weights directly.
+        _partitionIndependentCones(independent_weights);
+    }
+    else {
         std::ostringstream oss;
         oss << hmetis_path.filename().string() << ".part" << this->desired_parts << ".epsilon"
             << this->kahypar_imbalance_factor << ".seed" << this->kahypar_seed << ".KaHyPar";
         this->mtkahypar_output_filename = oss.str();
+
+        // 2. Call MtKaHyPar on the written hMetis file.
+        if (!_callMtKaHyPar())
+            return false;
+
+        // 3. Parse MtKaHyPar's output into coneIdToPartId / partIdToConeId.
+        if (!_parseKaHyParResult())
+            return false;
     }
-
-    // 2. Call MtKaHyPar on the written hMetis file.
-    if (!_callMtKaHyPar()) return false;
-
-    // 3. Parse MtKaHyPar's output into coneIdToPartId / partIdToConeId.
-    if (!_parseKaHyParResult()) return false;
 
     // 4. Reconstruct per-partition DAG node sets (upstream BFS).
     if (!_reconstruct(dag)) return false;

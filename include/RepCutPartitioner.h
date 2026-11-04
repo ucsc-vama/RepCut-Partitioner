@@ -16,7 +16,8 @@ namespace repcut {
     class RepCutPartitioner
     {
     private:
-        bool _buildAndWriteHmetis(DirectedAcyclicGraph& dag);
+        bool _buildAndWriteHmetis(DirectedAcyclicGraph& dag, std::vector<uint32_t>& independent_weights);
+        void _partitionIndependentCones(const std::vector<uint32_t>& weights);
         bool _callMtKaHyPar();
         bool _parseKaHyParResult();
         bool _reconstruct(DirectedAcyclicGraph& dag);
@@ -44,7 +45,7 @@ namespace repcut {
         // Verify MtKaHyPar binary exists and is executable.
         bool prepareMtKaHyParBin(const char* bin);
 
-        // Result: cone (sink) → partition id, as reported by MtKaHyPar.
+        // Result: cone (sink) → partition id.
         std::vector<uint32_t> coneIdToPartId;
         std::vector<std::vector<uint32_t>> partIdToConeId;
 
