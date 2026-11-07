@@ -198,6 +198,8 @@ checks seed selection and replay. Python 3 is required:
 python3 tests/test_edgeless.py --rcp build/tools/rcp/rcp --work-directory build/test-edgeless
 python3 tests/test_seed.py --rcp build/tools/rcp/rcp --work-directory build/test-seed
 python3 tests/test_weights.py --rcp build/tools/rcp/rcp --work-directory build/test-weights
+c++ -std=c++17 -Iinclude tests/test_cone_trie.cpp lib/repcut/ConeTrie.cpp -o build/test-cone-trie
+build/test-cone-trie
 ```
 
 Generated graphs, memberships and logs remain in the selected work directory.

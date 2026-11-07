@@ -21,6 +21,7 @@
 #include <queue>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -91,7 +92,13 @@ bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag, std::vec
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
     ClusterGraph cluster_graph;
     cluster_graph.log_level = log_level;
-    cluster_graph.collapseFromDAG(dag);
+    try {
+        cluster_graph.collapseFromDAG(dag);
+    }
+    catch (const std::length_error& error) {
+        rcp_log(log_level, REPCUT_LOG_ERROR, "Cannot build cluster graph: %s\n", error.what());
+        return false;
+    }
 
     hmetis_path = fs::path(work_directory) / "parts.hmetis";
     cluster_graph.writeHMetisFile(hmetis_path.c_str());

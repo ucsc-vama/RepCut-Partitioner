@@ -13,9 +13,9 @@
 using namespace repcut;
 
 // Phase A: for each sink BFS upstream, descending each vertex one level
-// deeper in the cone-id trie.  After this pass every vertex points to a
+// deeper in the cone-id trie.  After this pass every vertex stores a
 // trie leaf whose path is its cone-id set.  Vertices with the same set of
-// cones share the same leaf (pointer equality).
+// cones share the same leaf id.
 void ClusterGraph::_mark_cones()
 {
     rcp_log(log_level, REPCUT_LOG_DEBUG, "Mark cones: Start\n");
@@ -148,7 +148,7 @@ void ClusterGraph::_collect_clusters()
         clusterIdToPins.push_back(coneTrie->pathConeIds(leaf));
     }
 
-    // Trie + per-vertex trie pointers are no longer needed downstream.
+    // Trie + per-vertex trie ids are no longer needed downstream.
     vtxToNode.clear();
     vtxToNode.shrink_to_fit();
     coneTrie.reset();
@@ -192,7 +192,7 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph& dag)
     this->dag = &dag;
     // 1. find sink vtxs — already done in dag
 
-    // 2. mark cones (build persistent cone-id trie + per-vertex pointers)
+    // 2. mark cones (build persistent cone-id trie + per-vertex ids)
     this->_mark_cones();
 
     // 3. collect clusters (connected components within same-leaf groups)

@@ -1,50 +1,55 @@
 // Persistent cone-id trie: vertices with the same cone set share a leaf
-// node (pointer equality).  Cones MUST be inserted in strictly increasing
-// cone-id order (see ordering invariant).
+// node id. Cones MUST be inserted in strictly increasing cone-id order.
 
 #pragma once
 
-#include <cstdint>
-#include <deque>
-#include <utility>
-#include <vector>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace repcut {
 
     class ConeTrie
     {
     public:
-        struct Node
-        {
-            // Cone id added at this trie level.  Root uses UINT32_MAX as sentinel.
-            uint32_t value;
-            Node* parent;
-            // Children sorted by cone id for binary search on insert/lookup.
-            std::vector<std::pair<uint32_t, Node*>> children;
+        using NodeId = uint32_t;
 
-            Node() : value(UINT32_MAX), parent(nullptr) {}
-            Node(uint32_t v, Node* p) : value(v), parent(p) {}
-        };
+        ConeTrie();
 
-        ConeTrie() = default;
+        NodeId root() const { return 0; }
 
-        // Root node (stable address, never reallocated).
-        Node* root() { return &root_; }
-        const Node* root() const { return &root_; }
-
-        // Descend to child keyed by cone_id, allocating if needed.
-        Node* visit(Node* node, uint32_t cone_id);
+        // Repeated visits for the current cone share a child. Once a larger
+        // cone id is visited, earlier cone ids must never be visited again.
+        NodeId visit(NodeId node, uint32_t cone_id);
 
         // Cone ids from root to leaf in increasing order (empty for root).
-        std::vector<uint32_t> pathConeIds(const Node* leaf) const;
+        std::vector<uint32_t> pathConeIds(NodeId leaf) const;
 
-        size_t nodeCount() const { return arena_.size(); }
+        // Excludes the root.
+        size_t nodeCount() const { return size_ - 1; }
 
     private:
-        Node root_;
-        // Stable-address node pool (deque never invalidates pointers).
-        std::deque<Node> arena_;
+        static constexpr NodeId NO_NODE = UINT32_MAX;
+        static constexpr size_t CHUNK_BITS = 16;
+        static constexpr size_t CHUNK_SIZE = size_t{1} << CHUNK_BITS;
+
+        struct Node
+        {
+            // Cone id added at this trie level. Root uses UINT32_MAX as sentinel.
+            uint32_t value;
+            NodeId parent;
+            NodeId lastChild;
+        };
+        static_assert(sizeof(Node) == 12, "Cone trie nodes must remain compact");
+
+        Node& node(NodeId id);
+        const Node& node(NodeId id) const;
+        NodeId append(uint32_t value, NodeId parent);
+
+        // Growing the arena never moves existing nodes or copies a full arena.
+        std::vector<std::unique_ptr<Node[]>> chunks_;
+        size_t size_ = 0;
     };
 
 } // namespace repcut

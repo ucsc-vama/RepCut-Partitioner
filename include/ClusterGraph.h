@@ -21,9 +21,9 @@ namespace repcut {
         void _collect_clusters();
         void _update_cluster_weight();
 
-        // Trie mapping vertex -> leaf with its cone-id set; equality = pointer equality.
+        // Trie mapping vertex -> leaf with its cone-id set; equality = node-id equality.
         std::unique_ptr<ConeTrie> coneTrie;
-        std::vector<ConeTrie::Node*> vtxToNode;
+        std::vector<ConeTrie::NodeId> vtxToNode;
 
     public:
         std::vector<uint32_t> sinkNodes;
