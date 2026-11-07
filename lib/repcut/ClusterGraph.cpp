@@ -184,27 +184,6 @@ void ClusterGraph::_update_cluster_weight()
     rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster weight: Done in %llums\n", duration.count());
 }
 
-// Phase C: build inverse mapping cone_id -> cluster ids from clusterIdToPins.
-void ClusterGraph::_update_cluster_cone()
-{
-    rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster cones: Start\n");
-    auto start = std::chrono::system_clock::now();
-
-    const auto numCones = dag->sinkNodes.size();
-    cones_cg_nodes.assign(numCones, {});
-
-    for (uint32_t cid = 0; cid < clusters.size(); ++cid) {
-        for (auto cone_id : clusterIdToPins[cid]) {
-            cones_cg_nodes[cone_id].push_back(cid);
-        }
-    }
-
-    auto stop = std::chrono::system_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
-    uint64_t time_ms = duration.count();
-    rcp_log(log_level, REPCUT_LOG_DEBUG, "Update cluster cones: Done in %llums\n", time_ms);
-}
-
 void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph& dag)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse cluster graph: Start\n");
@@ -222,9 +201,6 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph& dag)
     // 4. compute cluster weight
     this->_update_cluster_weight();
 
-    // 5. build inverse mapping (cone → touching clusters)
-    this->_update_cluster_cone();
-
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
@@ -241,7 +217,6 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     auto start = std::chrono::system_clock::now();
 
     const auto numCones = dag->sinkNodes.size();
-    assert(numCones == cones_cg_nodes.size());
     const auto numEdges = clusters.size() - numCones;
     const auto numNodes = numCones;
 
@@ -249,16 +224,16 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     std::vector<uint32_t> nodeWeights;
     nodeWeights.reserve(numNodes);
     for (uint32_t cone_id = 0; cone_id < numCones; ++cone_id) {
-        auto cone_weight = static_cast<uint32_t>(nodeWeight[cone_id]);
-        uint32_t connected_cluster_weights = 0;
-        for (auto& cluster_id : cones_cg_nodes[cone_id]) {
-            if (cluster_id != cone_id) {
-                auto pin_count = clusterIdToPins[cluster_id].size();
-                auto cluster_weight = static_cast<uint32_t>(nodeWeight[cluster_id]);
-                connected_cluster_weights += (cluster_weight / pin_count);
-            }
+        nodeWeights.push_back(static_cast<uint32_t>(nodeWeight[cone_id]));
+    }
+    // Distribute each shared cluster's weight directly to its cones. Round
+    // each cluster's contribution separately, as in the inverse-mapping sum.
+    for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
+        const auto& pins = clusterIdToPins[cluster_id];
+        const auto cluster_weight = static_cast<uint32_t>(nodeWeight[cluster_id]);
+        for (const auto cone_id : pins) {
+            nodeWeights[cone_id] += cluster_weight / pins.size();
         }
-        nodeWeights.push_back(cone_weight + connected_cluster_weights);
     }
 
     std::ofstream ofs(filename);

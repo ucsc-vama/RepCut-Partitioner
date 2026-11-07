@@ -20,7 +20,6 @@ namespace repcut {
         void _mark_cones();
         void _collect_clusters();
         void _update_cluster_weight();
-        void _update_cluster_cone();
 
         // Trie mapping vertex -> leaf with its cone-id set; equality = pointer equality.
         std::unique_ptr<ConeTrie> coneTrie;
@@ -29,8 +28,6 @@ namespace repcut {
     public:
         std::vector<uint32_t> sinkNodes;
 
-        // Cone nodes in Cluster Graph (original cones are not retained).
-        std::vector<std::vector<uint32_t>> cones_cg_nodes;
         // Clusters should be non-overlapping
         std::vector<std::vector<uint32_t>> clusters;
 

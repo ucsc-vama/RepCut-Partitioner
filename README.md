@@ -197,6 +197,7 @@ checks seed selection and replay. Python 3 is required:
 ```sh
 python3 tests/test_edgeless.py --rcp build/tools/rcp/rcp --work-directory build/test-edgeless
 python3 tests/test_seed.py --rcp build/tools/rcp/rcp --work-directory build/test-seed
+python3 tests/test_weights.py --rcp build/tools/rcp/rcp --work-directory build/test-weights
 ```
 
 Generated graphs, memberships and logs remain in the selected work directory.
