@@ -25,7 +25,7 @@ struct RepCutContext
     int nparts;                    // required: partition count
     float target_ib;               // default 0.03
     int parallel_threads;          // default 1 (only 1 is deterministic for MtKaHyPar)
-    int seed;                      // -1 = MtKaHyPar picks
+    int seed;                      // nonnegative fixed seed; -1 = choose randomly, logged at INFO
     enum RepCutLogLevel log_level; // default SILENT
 
     // MtKaHyPar binary to invoke as a subprocess.  If NULL, librepcut

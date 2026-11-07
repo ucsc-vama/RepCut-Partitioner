@@ -12,11 +12,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <numeric>
 #include <queue>
+#include <random>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -27,6 +30,30 @@
 using namespace repcut;
 
 namespace fs = std::filesystem;
+
+bool RepCutPartitioner::_resolveSeed()
+{
+    if (kahypar_seed < -1) {
+        rcp_log(log_level, REPCUT_LOG_ERROR, "seed must be -1 or nonnegative (got %d)\n", kahypar_seed);
+        return false;
+    }
+
+    mtkahypar_seed = kahypar_seed;
+    if (kahypar_seed == -1) {
+        try {
+            std::random_device random;
+            std::uniform_int_distribution<int32_t> distribution(0, std::numeric_limits<int32_t>::max());
+            mtkahypar_seed = distribution(random);
+        }
+        catch (const std::exception& error) {
+            rcp_log(log_level, REPCUT_LOG_ERROR, "Cannot choose a random seed: %s\n", error.what());
+            return false;
+        }
+    }
+    rcp_log(log_level, REPCUT_LOG_INFO, "Partition seed: %d%s\n", mtkahypar_seed,
+            kahypar_seed == -1 ? " (random)" : "");
+    return true;
+}
 
 // Verify MtKaHyPar binary exists before any expensive work.
 bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
@@ -132,7 +159,7 @@ bool RepCutPartitioner::_callMtKaHyPar()
     args.push_back("--preset-type");
     args.push_back("default");
     args.push_back("--seed");
-    args.push_back(std::to_string(this->kahypar_seed));
+    args.push_back(std::to_string(this->mtkahypar_seed));
     args.push_back("--mode");
     args.push_back("direct");
     args.push_back("-o");
@@ -274,6 +301,8 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     auto start = std::chrono::system_clock::now();
 
     this->desired_parts = nparts;
+    if (!_resolveSeed())
+        return false;
 
     // 1. Collapse DAG to cluster graph and write hMetis file.
     std::vector<uint32_t> independent_weights;
@@ -288,7 +317,7 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     else {
         std::ostringstream oss;
         oss << hmetis_path.filename().string() << ".part" << this->desired_parts << ".epsilon"
-            << this->kahypar_imbalance_factor << ".seed" << this->kahypar_seed << ".KaHyPar";
+            << this->kahypar_imbalance_factor << ".seed" << this->mtkahypar_seed << ".KaHyPar";
         this->mtkahypar_output_filename = oss.str();
 
         // 2. Call MtKaHyPar on the written hMetis file.

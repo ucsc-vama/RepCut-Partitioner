@@ -61,12 +61,10 @@ Installs only `install/lib/librepcut.a` (plus headers).
 
 `--target_ib arg`      target imbalance factor. Default 0.03.
 
-`--threads arg`        parallel threads passed to MtKaHyPar. Only `--threads 1`
-                       is deterministic. Only `1` by default.
+`--threads arg`        parallel threads passed to MtKaHyPar. Default `1`.
 
-`--seed arg`           seed passed to MtKaHyPar. `-1` lets MtKaHyPar pick.
-                       Set a fixed value (along with `--threads 1`) for
-                       reproducible partitioning runs.
+`--seed arg`           nonnegative seed passed to MtKaHyPar. Default `-1`
+                       chooses a random seed. Use `-v` to see the chosen seed.
 
 `--mtkahypar_bin arg`  path to the MtKaHyPar binary.  If omitted, `rcp` searches
                        `$PATH` for `MtKaHyPar`.
@@ -74,7 +72,6 @@ Installs only `install/lib/librepcut.a` (plus headers).
 `--log_level arg`      log level: `silent`, `error`, `warn`, `info`, `debug`.
 
 `-v` / `-vv`           shorthand for `--log_level info` / `--log_level debug`.
-
 
 ## On `--target_ib` (imbalance target)
 
@@ -136,6 +133,11 @@ are sorted ascending and correspond to the graph file's line number minus one
 
 Partition lines are written in partition-id order (0, 1, ..., nparts-1).
 
+# Deterministic
+
+For deterministic partitioning, use a fixed seed (not `-1`) and `--threads 1`.
+MtKaHyPar's default preset does not guarantee determinism with multiple threads.
+
 # C Library API
 
 `librepcut` exposes a reentrant extern-C entry point declared in
@@ -157,6 +159,8 @@ int repcut_run(const struct RepCutContext* ctx,
   an explicit error rather than mid-run.
 - By default writes nothing to stderr on success; errors always print.
   Info/debug output is gated by `ctx->log_level`.
+- `ctx->seed`: a nonnegative fixed seed, or `-1` for a random seed.
+  The chosen value is logged at info level.
 - Per-partition statistics are available via the optional `stats_out`
   parameter. (C++ callers can also use `repcut::RepCutPartitioner` directly
   to obtain the full per-partition breakdown.)
@@ -187,10 +191,12 @@ An example graph file is under the `example/` directory.
 
 The independent-cone regression uses a guarded MtKaHyPar stub to check that
 edgeless hypergraphs bypass partitioning, while shared dependencies still
-invoke the external tool and propagate its failures. Python 3 is required:
+invoke the external tool and propagate its failures. The seed regression
+checks seed selection and replay. Python 3 is required:
 
 ```sh
 python3 tests/test_edgeless.py --rcp build/tools/rcp/rcp --work-directory build/test-edgeless
+python3 tests/test_seed.py --rcp build/tools/rcp/rcp --work-directory build/test-seed
 ```
 
 Generated graphs, memberships and logs remain in the selected work directory.

@@ -16,6 +16,7 @@ namespace repcut {
     class RepCutPartitioner
     {
     private:
+        bool _resolveSeed();
         bool _buildAndWriteHmetis(DirectedAcyclicGraph& dag, std::vector<uint32_t>& independent_weights);
         void _partitionIndependentCones(const std::vector<uint32_t>& weights);
         bool _callMtKaHyPar();
@@ -28,6 +29,8 @@ namespace repcut {
         fs::path mtkahypar_output_filename;
         // Resolved MtKaHyPar binary path (set by prepareMtKaHyParBin).
         std::string mtkahypar_bin_resolved;
+        // Resolved once per partition() call; the requested seed may remain -1.
+        int32_t mtkahypar_seed = 0;
 
     public:
         // Parameters.
