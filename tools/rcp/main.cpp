@@ -19,10 +19,12 @@ int main(int argc, char** argv)
     ctx.parallel_threads = opts.parallel_threads;
     ctx.seed = opts.seed;
     ctx.log_level = resolve_log_level();
-    // Empty string => NULL so library searches $PATH.
+    // Empty string selects the build's default backend.
     ctx.mtkahypar_bin = opts.mtkahypar_bin.empty() ? nullptr : opts.mtkahypar_bin.c_str();
 
-    struct RepCutStatistics stat{};
+    struct RepCutStatistics stat
+    {
+    };
     const int rc = repcut_run(&ctx, &stat);
     if (rc != 0) {
         return rc;

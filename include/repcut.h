@@ -1,5 +1,5 @@
 // Public C interface to librepcut (RepCut partitioning pipeline).
-// Reentrant across distinct work_directories (uses .lock file).
+// Sequential calls are supported; overlapping calls in one process are rejected.
 
 #ifndef REPCUT_H
 #define REPCUT_H
@@ -24,16 +24,14 @@ struct RepCutContext
     const char* work_directory;    // required: writable dir; must be unique per concurrent run
     int nparts;                    // required: partition count
     float target_ib;               // default 0.03
-    int parallel_threads;          // default 1 (only 1 is deterministic for MtKaHyPar)
+    int parallel_threads;          // default 1
     int seed;                      // nonnegative fixed seed; -1 = choose randomly, logged at INFO
     enum RepCutLogLevel log_level; // default SILENT
 
-    // MtKaHyPar binary to invoke as a subprocess.  If NULL, librepcut
-    // searches $PATH for "MtKaHyPar".  If non-NULL, the value is used
-    // verbatim (may be an absolute path or a name resolved via $PATH).
-    // In both cases the binary is verified to exist and be executable
-    // before the design graph is traversed, so a missing binary fails
-    // fast with an explicit error rather than mid-run.
+    // Optional MtKaHyPar-compatible executable. A nonempty value overrides
+    // the linked backend. NULL/empty uses linked MtKaHyPar, or searches PATH
+    // for "MtKaHyPar" in executable-only builds.
+    // An explicit executable is checked with --version before graph traversal.
     const char* mtkahypar_bin;
 };
 
@@ -61,6 +59,16 @@ struct RepCutStatistics
 // Run the full RepCut pipeline.  Returns 0 on success, non-zero on failure.
 // On success, writes "rcp_output.txt" under ctx->work_directory.  If
 // stats_out is non-NULL, populated with aggregate partition statistics.
+// Only one call may be active per process, even with distinct work directories.
+// The first linked-backend call initializes MtKaHyPar's process-wide thread
+// pool; later linked calls must request the same parallel_threads. Per-call
+// resources are released, but the pool and TBB concurrency limit remain until
+// process exit. The host must not initialize or use MtKaHyPar independently
+// of librepcut.
+// MtKaHyPar 1.7 does not reset all cached RNG state when reseeding, so repeated
+// linked calls may produce different partitions with the same seed, even at
+// one thread. For reproducibility, use a fixed seed, one thread, and a fresh
+// process for each run with the same backend.
 int repcut_run(const struct RepCutContext* ctx, struct RepCutStatistics* stats_out);
 
 #ifdef __cplusplus

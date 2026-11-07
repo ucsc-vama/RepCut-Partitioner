@@ -17,17 +17,18 @@ namespace repcut {
     {
     private:
         bool _resolveSeed();
-        bool _buildAndWriteHmetis(DirectedAcyclicGraph& dag, std::vector<uint32_t>& independent_weights);
+        bool _partitionCones(DirectedAcyclicGraph& dag);
         void _partitionIndependentCones(const std::vector<uint32_t>& weights);
         bool _callMtKaHyPar();
         bool _parseKaHyParResult();
         bool _reconstruct(DirectedAcyclicGraph& dag);
 
-        // hmetis file path (written by _buildAndWriteHmetis, read by _callMtKaHyPar).
+        bool use_mtkahypar_library = false;
+        // hmetis file path for the executable backend.
         fs::path hmetis_path;
         // Output filename produced by MtKaHyPar.
         fs::path mtkahypar_output_filename;
-        // Resolved MtKaHyPar binary path (set by prepareMtKaHyParBin).
+        // Resolved MtKaHyPar binary path (set by prepareMtKaHyPar).
         std::string mtkahypar_bin_resolved;
         // Resolved once per partition() call; the requested seed may remain -1.
         int32_t mtkahypar_seed = 0;
@@ -45,8 +46,8 @@ namespace repcut {
         // Log threshold carried from RepCutContext.
         RepCutLogLevel log_level = REPCUT_LOG_SILENT;
 
-        // Verify MtKaHyPar binary exists and is executable.
-        bool prepareMtKaHyParBin(const char* bin);
+        // Select the linked library, or verify an executable override.
+        bool prepareMtKaHyPar(const char* bin);
 
         // Result: cone (sink) → partition id.
         std::vector<uint32_t> coneIdToPartId;

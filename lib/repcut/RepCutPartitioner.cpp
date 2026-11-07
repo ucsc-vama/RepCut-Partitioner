@@ -4,6 +4,10 @@
 #include "Log.h"
 #include "StringUtils.h"
 
+#ifdef RCP_USE_MTKAHYPAR
+#include "MtKaHyPar.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
@@ -55,9 +59,14 @@ bool RepCutPartitioner::_resolveSeed()
     return true;
 }
 
-// Verify MtKaHyPar binary exists before any expensive work.
-bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
+// Select and initialize the backend before any expensive work.
+bool RepCutPartitioner::prepareMtKaHyPar(const char* bin)
 {
+#ifdef RCP_USE_MTKAHYPAR
+    use_mtkahypar_library = bin == nullptr || bin[0] == '\0';
+    if (use_mtkahypar_library)
+        return MtKaHyPar::initialize(parallel_threads, log_level);
+#endif
     const std::string resolved = (bin != nullptr && bin[0] != '\0') ? std::string(bin) : std::string("MtKaHyPar");
 
     rcp_log(log_level, REPCUT_LOG_DEBUG, "Verifying MtKaHyPar binary: %s\n", resolved.c_str());
@@ -84,32 +93,47 @@ bool RepCutPartitioner::prepareMtKaHyParBin(const char* bin)
     return true;
 }
 
-// Build cluster graph from DAG and write hMetis file. When no clusters are
-// shared between cones, return their weights for direct load balancing.
-bool RepCutPartitioner::_buildAndWriteHmetis(DirectedAcyclicGraph& dag, std::vector<uint32_t>& independent_weights)
+// Keep cluster construction and MtKaHyPar partitioning in separate lifetimes.
+// This matters on large designs: neither backend needs the clusters once its
+// hypergraph has been constructed or written.
+bool RepCutPartitioner::_partitionCones(DirectedAcyclicGraph& dag)
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse into cluster graph\n");
-    ClusterGraph cluster_graph;
-    cluster_graph.log_level = log_level;
-    try {
-        cluster_graph.collapseFromDAG(dag);
+    auto clusters = std::make_unique<ClusterGraph>();
+    clusters->log_level = log_level;
+    clusters->collapseFromDAG(dag);
+
+    if (!use_mtkahypar_library) {
+        hmetis_path = fs::path(work_directory) / "parts.hmetis";
+        clusters->writeHMetisFile(hmetis_path.c_str());
     }
-    catch (const std::length_error& error) {
-        rcp_log(log_level, REPCUT_LOG_ERROR, "Cannot build cluster graph: %s\n", error.what());
-        return false;
+    if (clusters->clusters.size() == clusters->sinkNodes.size()) {
+        const auto weights = clusters->hypernodeWeights();
+        clusters.reset();
+        _partitionIndependentCones(weights);
+        return true;
     }
 
-    hmetis_path = fs::path(work_directory) / "parts.hmetis";
-    cluster_graph.writeHMetisFile(hmetis_path.c_str());
-    independent_weights.clear();
-    if (cluster_graph.clusters.size() == cluster_graph.sinkNodes.size()) {
-        independent_weights.reserve(cluster_graph.nodeWeight.size());
-        for (const float weight : cluster_graph.nodeWeight) {
-            // Match the positive integer weights written to the hypergraph.
-            independent_weights.push_back(static_cast<uint32_t>(weight));
-        }
+#ifdef RCP_USE_MTKAHYPAR
+    if (use_mtkahypar_library) {
+        MtKaHyPar backend(desired_parts, kahypar_imbalance_factor, mtkahypar_seed, log_level);
+        if (!backend.create(*clusters))
+            return false;
+        clusters.reset();
+        if (!backend.partition(coneIdToPartId))
+            return false;
+        partIdToConeId.assign(desired_parts, {});
+        for (uint32_t cone = 0; cone < coneIdToPartId.size(); ++cone)
+            partIdToConeId[coneIdToPartId[cone]].push_back(cone);
+        return true;
     }
-    return true;
+#endif
+    clusters.reset();
+    std::ostringstream oss;
+    oss << hmetis_path.filename().string() << ".part" << desired_parts << ".epsilon" << kahypar_imbalance_factor
+        << ".seed" << mtkahypar_seed << ".KaHyPar";
+    mtkahypar_output_filename = oss.str();
+    return _callMtKaHyPar() && _parseKaHyParResult();
 }
 
 // An edgeless cone-overlap hypergraph has no replication cost to minimize.
@@ -148,7 +172,7 @@ bool RepCutPartitioner::_callMtKaHyPar()
 {
     rcp_log(log_level, REPCUT_LOG_INFO, "Call MtKaHyPar\n");
     assert(this->parallel_threads > 0);
-    assert(!mtkahypar_bin_resolved.empty() && "prepareMtKaHyParBin must be called before _callMtKaHyPar");
+    assert(!mtkahypar_bin_resolved.empty() && "prepareMtKaHyPar must be called before _callMtKaHyPar");
 
     std::vector<std::string> args;
 
@@ -316,33 +340,12 @@ bool RepCutPartitioner::partition(DirectedAcyclicGraph& dag, const int nparts)
     if (!_resolveSeed())
         return false;
 
-    // 1. Collapse DAG to cluster graph and write hMetis file.
-    std::vector<uint32_t> independent_weights;
-    if (!_buildAndWriteHmetis(dag, independent_weights))
+    if (!_partitionCones(dag))
         return false;
 
-    if (!independent_weights.empty()) {
-        // Disjoint cones have no cut to optimize. Retain the ordinary
-        // reconstruction path after balancing their weights directly.
-        _partitionIndependentCones(independent_weights);
-    }
-    else {
-        std::ostringstream oss;
-        oss << hmetis_path.filename().string() << ".part" << this->desired_parts << ".epsilon"
-            << this->kahypar_imbalance_factor << ".seed" << this->mtkahypar_seed << ".KaHyPar";
-        this->mtkahypar_output_filename = oss.str();
-
-        // 2. Call MtKaHyPar on the written hMetis file.
-        if (!_callMtKaHyPar())
-            return false;
-
-        // 3. Parse MtKaHyPar's output into coneIdToPartId / partIdToConeId.
-        if (!_parseKaHyParResult())
-            return false;
-    }
-
-    // 4. Reconstruct per-partition DAG node sets (upstream BFS).
-    if (!_reconstruct(dag)) return false;
+    // Reconstruct per-partition DAG node sets (upstream BFS).
+    if (!_reconstruct(dag))
+        return false;
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -390,16 +393,14 @@ std::unique_ptr<PartitionStatistics> RepCutPartitioner::reportPartitionStatus(Di
 
     ret->total_part_size = total_part_size;
     ret->replication_size = ret->total_part_size - ret->sg_size;
-    ret->replication_rate_size = (ret->sg_size > 0)
-        ? static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size
-        : 0.0f;
+    ret->replication_rate_size =
+        (ret->sg_size > 0) ? static_cast<float>(ret->replication_size) * 100.0f / ret->sg_size : 0.0f;
     ret->ib_factor_size = calculate_ib_factor(ret->partition_size);
 
     ret->total_part_weight = total_part_weight;
     ret->replication_weight = ret->total_part_weight - ret->sg_weight;
-    ret->replication_rate_weight = (ret->sg_weight != 0.0f)
-        ? static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight
-        : 0.0f;
+    ret->replication_rate_weight =
+        (ret->sg_weight != 0.0f) ? static_cast<float>(ret->replication_weight) * 100.0f / ret->sg_weight : 0.0f;
     ret->ib_factor_weight = calculate_ib_factor(ret->partition_weights);
 
     return ret;

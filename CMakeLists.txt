@@ -13,6 +13,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # boost::program_options.  Disable to build and install only librepcut, which
 # has zero Boost dependency.
 option(RCP_BUILD_CLI "Build the rcp command-line tool (requires boost::program_options)" ON)
+option(RCP_USE_MTKAHYPAR "Link MtKaHyPar instead of requiring its executable" ON)
+option(RCP_BUILD_TESTS "Build library API regression tests" OFF)
+
+set(RCP_MTKAHYPAR_USE_HWLOC OFF)
+if(RCP_USE_MTKAHYPAR)
+    include(cmake/MtKaHyPar.cmake)
+endif()
 
 # All installable targets go into the `repcut-targets` export set so that
 # downstream consumers can `find_package(repcut)` and link against the
@@ -25,10 +32,18 @@ if(RCP_BUILD_CLI)
     install(TARGETS rcp DESTINATION bin)
 endif()
 
+if(RCP_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 install(TARGETS repcut
         EXPORT repcut-targets
         DESTINATION lib)
 install(FILES include/repcut.h DESTINATION include)
+install(FILES LICENSE DESTINATION share/licenses/repcut)
+install(FILES external/tiny-process-library/LICENSE
+        DESTINATION share/licenses/repcut RENAME tiny-process-library-LICENSE)
 
 # Generate and install the package config so consumers can do:
 #   find_package(repcut CONFIG REQUIRED)

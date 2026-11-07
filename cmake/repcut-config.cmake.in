@@ -3,4 +3,22 @@
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
 
+if(@RCP_USE_MTKAHYPAR@)
+    find_dependency(TBB 2021.5 COMPONENTS tbb tbbmalloc)
+    if(@RCP_MTKAHYPAR_USE_HWLOC@ AND NOT TARGET repcut::hwloc)
+        find_path(REPCUT_HWLOC_INCLUDE_DIR NAMES hwloc.h)
+        find_library(REPCUT_HWLOC_LIBRARY NAMES hwloc)
+        mark_as_advanced(REPCUT_HWLOC_INCLUDE_DIR REPCUT_HWLOC_LIBRARY)
+        if(NOT REPCUT_HWLOC_INCLUDE_DIR OR NOT REPCUT_HWLOC_LIBRARY)
+            set(repcut_FOUND FALSE)
+            set(repcut_NOT_FOUND_MESSAGE "hwloc is required by the bundled MtKaHyPar library")
+            return()
+        endif()
+        add_library(repcut::hwloc UNKNOWN IMPORTED)
+        set_target_properties(repcut::hwloc PROPERTIES
+            IMPORTED_LOCATION "${REPCUT_HWLOC_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${REPCUT_HWLOC_INCLUDE_DIR}")
+    endif()
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/repcut-targets.cmake")

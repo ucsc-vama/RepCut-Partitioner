@@ -48,6 +48,9 @@ namespace repcut {
 
         void collapseFromDAG(const DirectedAcyclicGraph& dag);
 
+        uint32_t clusterWeight(size_t cluster_id) const;
+        std::vector<uint32_t> hypernodeWeights() const;
+
         // Write hMetis-format file (nodes=cone clusters, edges=non-cone clusters).
         void writeHMetisFile(const char* filename);
     };

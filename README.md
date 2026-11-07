@@ -14,38 +14,38 @@ ASPLOS 2023).
 }
 ```
 
-This release ships both a command-line tool (`rcp`) and a small reentrant C
+This release ships both a command-line tool (`rcp`) and a C
 library (`librepcut`) suitable for embedding into other simulators/tools.
 
 # Requirements & Dependencies
 
-1. Compiler that supports C++17
-2. `boost::program_options` — only needed when building the `rcp` CLI tool.
-   `librepcut` itself has zero Boost dependency (it links only the vendored
-   [`tiny-process-library`](https://gitlab.com/eidheim/tiny-process-library)
-   sources, which are included in-tree under `external/tiny-process-library/`).
-
-`MtKaHyPar` binary directory must be in `$PATH` or specified.
+- C++20 compiler and CMake 3.26 or newer.
+- oneTBB 2021.5 or newer and hwloc development files.
+- Boost.Program_options for the `rcp` CLI.
 
 # Build
 
-## Default: CLI tool + library
+RepCut builds and statically links the bundled MtKaHyPar v1.7 submodule.
 
-> mkdir install \
-> mkdir build && cd build \
-> cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install \
-> make install
+```sh
+git submodule update --init --recursive
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install
+cmake --build build -j 4
+cmake --install build
+```
 
-Installs `install/bin/rcp` (the CLI tool) and `install/lib/librepcut.a`.
+The first configure downloads MtKaHyPar's pinned source dependencies.
+The install includes `rcp`, both libraries, and the CMake target `repcut::repcut`.
+Add `-DRCP_BUILD_CLI=OFF` to build only the libraries, without Boost.
 
-## Library only (no Boost required)
+oneTBB and hwloc must also be available at runtime.
 
-> mkdir install \
-> mkdir build && cd build \
-> cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=../install -DRCP_BUILD_CLI=OFF \
-> make install
+## Build without linked MtKaHyPar
 
-Installs only `install/lib/librepcut.a` (plus headers).
+Configure with `-DRCP_USE_MTKAHYPAR=OFF`. C++17 is sufficient; the MtKaHyPar
+submodule, oneTBB, and hwloc are not needed to build RCP.
+At runtime, provide `MtKaHyPar` on `$PATH` or specify its path with
+`--mtkahypar_bin` (`ctx->mtkahypar_bin` in the C API).
 
 # Command Line Options
 
@@ -66,8 +66,8 @@ Installs only `install/lib/librepcut.a` (plus headers).
 `--seed arg`           nonnegative seed passed to MtKaHyPar. Default `-1`
                        chooses a random seed. Use `-v` to see the chosen seed.
 
-`--mtkahypar_bin arg`  path to the MtKaHyPar binary.  If omitted, `rcp` searches
-                       `$PATH` for `MtKaHyPar`.
+`--mtkahypar_bin arg`  external executable override, using MtKaHyPar's CLI and
+                       partition-file format. Defaults to linked MtKaHyPar.
 
 `--log_level arg`      log level: `silent`, `error`, `warn`, `info`, `debug`.
 
@@ -78,7 +78,7 @@ Installs only `install/lib/librepcut.a` (plus headers).
 When the cone-overlap hypergraph has no edges, the cones are independent.
 RepCut assigns whole cones in descending weight order to the least-loaded
 partition, breaking ties by cone and partition id. This skips MtKaHyPar's
-partitioning call; the early binary availability check still applies. The
+partitioning call. Executable overrides are still checked at startup. The
 existing hypergraph weights, including their positive floor, are used. This
 greedy balance is not guaranteed to meet `--target_ib`, especially when one
 cone is much heavier than the others. No replication is needed in this case.
@@ -135,12 +135,17 @@ Partition lines are written in partition-id order (0, 1, ..., nparts-1).
 
 # Deterministic
 
-For deterministic partitioning, use a fixed seed (not `-1`) and `--threads 1`.
+For deterministic partitioning, use a fixed seed (not `-1`), `--threads 1`, and
+a fresh process for each run.
 MtKaHyPar's default preset does not guarantee determinism with multiple threads.
+MtKaHyPar 1.7 reseeds its generator but does not reset the cached coin-flip
+position or normal-distribution cache. Earlier linked-library calls can therefore
+affect later partitions, even with the same seed and one thread.
+The CLI and library backends may produce different partitions for the same seed.
 
 # C Library API
 
-`librepcut` exposes a reentrant extern-C entry point declared in
+`librepcut` exposes an extern-C entry point declared in
 `include/repcut.h`:
 
 ```c
@@ -150,20 +155,22 @@ int repcut_run(const struct RepCutContext* ctx,
 
 - Returns 0 on success, non-zero on failure.
 - On success, writes `rcp_output.txt` under `ctx->work_directory`.
-- Reentrant: may be called concurrently from multiple threads **only if**
-  each call uses a distinct `work_directory`. A `.lock` file is used as a
-  concurrent-use safeguard.
-- `ctx->mtkahypar_bin`: if NULL, `librepcut` searches `$PATH` for `MtKaHyPar`;
-  if non-NULL, used verbatim. The binary is verified (run with `--version`)
-  before any graph traversal, so a missing/unusable binary fails fast with
-  an explicit error rather than mid-run.
+- Repeated sequential calls are supported. Overlapping calls in the same
+  process are rejected, even with distinct work directories.
+- The first linked call initializes MtKaHyPar's process-wide thread pool.
+  Later linked calls must use the same `parallel_threads`; graphs, partition
+  counts and seeds may change. The host must not initialize or use MtKaHyPar
+  independently of `librepcut`.
+- Per-call contexts and graphs are released. MtKaHyPar's global pool and
+  allocator caches can remain until process exit. Its TBB concurrency limit
+  also affects other TBB users in the process.
+- `ctx->mtkahypar_bin`: NULL/empty uses linked MtKaHyPar. A nonempty value
+  selects that executable, checked before graph traversal.
 - By default writes nothing to stderr on success; errors always print.
   Info/debug output is gated by `ctx->log_level`.
 - `ctx->seed`: a nonnegative fixed seed, or `-1` for a random seed.
   The chosen value is logged at info level.
-- Per-partition statistics are available via the optional `stats_out`
-  parameter. (C++ callers can also use `repcut::RepCutPartitioner` directly
-  to obtain the full per-partition breakdown.)
+- Aggregate statistics are available via the optional `stats_out` parameter.
 
 # Graph File Format
 
@@ -188,6 +195,15 @@ are tolerated by the parser.
 An example graph file is under the `example/` directory.
 
 # Tests
+
+Library tests cover sequential reuse, dependency closure, error recovery and
+overlap rejection:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRCP_BUILD_TESTS=ON
+cmake --build build -j 4
+ctest --test-dir build --output-on-failure
+```
 
 The independent-cone regression uses a guarded MtKaHyPar stub to check that
 edgeless hypergraphs bypass partitioning, while shared dependencies still

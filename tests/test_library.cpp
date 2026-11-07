@@ -1,0 +1,199 @@
+#include "repcut.h"
+
+#include <chrono>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace fs = std::filesystem;
+
+static void require(bool condition, const char* message)
+{
+    if (!condition)
+        throw std::runtime_error(message);
+}
+
+static std::string read(const fs::path& path)
+{
+    std::ifstream file(path);
+    require(file.good(), "Cannot read test output");
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+static bool waitFor(const fs::path& path)
+{
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (!fs::exists(path)) {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return true;
+}
+
+static void writeGraph(unsigned n)
+{
+    std::ofstream graph("input.graph");
+    graph << 3 * n << ' ' << 2 * n << '\n';
+    for (unsigned i = 0; i < n; ++i)
+        graph << "n " << 0.25 + i % 5 << ' ' << n + i << ' ' << n + (i + 1) % n << ' ' << n + (i + 7) % n << '\n';
+    for (unsigned i = 0; i < n; ++i)
+        graph << "n " << 1 + i % 3 << '\n';
+}
+
+static void checkClosure(const std::string& output, unsigned n, int k)
+{
+    std::vector<unsigned> owners(n);
+    std::istringstream lines(output);
+    std::string line;
+    int parts = 0;
+    while (std::getline(lines, line)) {
+        ++parts;
+        std::vector<bool> present(2 * n);
+        std::istringstream fields(line);
+        std::string field;
+        while (std::getline(fields, field, ',')) {
+            if (field.empty())
+                continue;
+            const auto node = std::stoul(field);
+            require(node < 2 * n && !present[node], "Invalid or duplicate DAG node");
+            present[node] = true;
+        }
+        for (unsigned i = 0; i < n; ++i) {
+            if (present[n + i])
+                ++owners[i];
+            const bool needed = present[n + i] || present[n + (i + 1) % n] || present[n + (i + 7) % n];
+            require(present[i] == needed, "Partition is not exactly its sinks' dependency closure");
+        }
+    }
+    require(parts == k, "Wrong number of partitions");
+    for (const auto count : owners)
+        require(count == 1, "Sink must have exactly one owner");
+}
+
+static void repeat(int threads)
+{
+    RepCutContext ctx{"input.graph", ".", 2, 0.1f, threads, 42, REPCUT_LOG_SILENT, nullptr};
+    for (unsigned run = 0; run < 100; ++run) {
+        // Include graphs large enough to exercise MtKaHyPar's coarsening.
+        const unsigned n = 128U << (run % 4);
+        ctx.nparts = 1 + run % 4;
+        ctx.seed = 17 + run % 5;
+        writeGraph(n);
+        RepCutStatistics stats{};
+        require(repcut_run(&ctx, &stats) == 0, "Sequential call failed");
+        require(!fs::exists(".lock"), "Work directory lock leaked");
+        require(stats.nparts == static_cast<unsigned>(ctx.nparts) && stats.sg_size == 2 * n, "Incorrect statistics");
+        const auto output = read("rcp_output.txt");
+        checkClosure(output, n, ctx.nparts);
+    }
+    require(!fs::exists("parts.hmetis"), "Linked backend wrote an intermediate hypergraph");
+
+    // Initialization is process-wide; a rejected thread change must leave the
+    // original pool and both busy/workdir guards usable for the next call.
+    ++ctx.parallel_threads;
+    require(repcut_run(&ctx, nullptr) != 0, "Changing the thread pool size was accepted");
+    --ctx.parallel_threads;
+    ctx.seed = -1;
+    require(repcut_run(&ctx, nullptr) == 0, "Call after thread-count rejection failed");
+    ctx.seed = -2;
+    require(repcut_run(&ctx, nullptr) != 0, "Invalid seed was accepted");
+    ctx.seed = 42;
+    ctx.target_ib = std::numeric_limits<float>::quiet_NaN();
+    require(repcut_run(&ctx, nullptr) != 0, "Invalid imbalance was accepted");
+    ctx.target_ib = 0.1f;
+    std::ofstream("input.graph") << "2 3\na 4294967296 1 2\nb 1\nc 1\n";
+    require(repcut_run(&ctx, nullptr) != 0, "Cluster weight overflow was accepted");
+    std::ofstream("input.graph") << "2 3\na 2147483648 1 2\nb 1\nc 1\n";
+    require(repcut_run(&ctx, nullptr) != 0, "Signed edge weight overflow was accepted");
+    std::ofstream("input.graph") << "2 3\na 1 1 2\nb 2147483648\nc 1\n";
+    require(repcut_run(&ctx, nullptr) != 0, "Signed node weight overflow was accepted");
+    std::ofstream("input.graph") << "1 2\na 1 9\nb 1\n";
+    require(repcut_run(&ctx, nullptr) != 0, "Malformed graph was accepted");
+    writeGraph(32);
+    require(repcut_run(&ctx, nullptr) == 0, "Call after input rejection failed");
+    checkClosure(read("rcp_output.txt"), 32, ctx.nparts);
+    int from_other_thread = 1;
+    std::thread caller([&]() { from_other_thread = repcut_run(&ctx, nullptr); });
+    caller.join();
+    require(from_other_thread == 0, "Sequential call from a different caller thread failed");
+    checkClosure(read("rcp_output.txt"), 32, ctx.nparts);
+
+    // Independent cones bypass MtKaHyPar and keep their wider load sums.
+    std::ofstream independent("input.graph");
+    independent << "0 10\n";
+    for (int i = 0; i < 10; ++i)
+        independent << "n 1073741824\n";
+    independent.close();
+    require(repcut_run(&ctx, nullptr) == 0, "Independent wide weights failed");
+    std::ofstream("input.graph") << "0 0\n";
+    require(repcut_run(&ctx, nullptr) == 0, "Empty graph failed");
+    require(!fs::exists(".lock"), "Work directory lock leaked on error");
+    std::cout << "100 sequential calls, dependency closure and error recovery passed\n";
+}
+
+static void overlap(const std::string& executable)
+{
+    writeGraph(16);
+    fs::remove("version-ready");
+    fs::remove("version-release");
+    std::ofstream("hold-version");
+    RepCutContext ctx{"input.graph", ".", 2, 0.1f, 1, 42, REPCUT_LOG_SILENT, executable.c_str()};
+    int first = 0;
+    std::thread caller([&]() { first = repcut_run(&ctx, nullptr); });
+    const bool started = waitFor("version-ready");
+    // The other thread is held inside --version, so this must reject overlap
+    // even though the second caller has a separate work directory.
+    fs::create_directory("other");
+    auto other = ctx;
+    other.work_directory = "other";
+    const int second = started ? repcut_run(&other, nullptr) : 0;
+    std::ofstream("version-release");
+    caller.join();
+    fs::remove("hold-version");
+    require(started, "Executable stub did not start");
+    require(second != 0, "Overlapping call was accepted");
+    require(first != 0, "Executable partition failure was not propagated");
+    require(!fs::exists(".lock") && !fs::exists("other/.lock"), "Lock leaked after failure");
+    std::ofstream("input.graph") << "0 2\na 1\nb 1\n";
+    require(repcut_run(&ctx, nullptr) == 0, "Call after overlap/failure did not recover");
+    std::cout << "Overlap rejection and recovery passed\n";
+}
+
+int main(int argc, char** argv)
+{
+    try {
+        // Act as an executable stub as well as a test driver.
+        if (argc == 2 && std::string(argv[1]) == "--version") {
+            if (fs::exists("hold-version")) {
+                std::ofstream("version-ready");
+                return waitFor("version-release") ? 0 : 90;
+            }
+            return 0;
+        }
+        if (argc > 1 && std::string(argv[1]) == "-t")
+            return 73;
+        require(argc >= 3, "Usage: test-library repeat|overlap WORKDIR [THREADS]");
+        const auto executable = fs::absolute(argv[0]).string();
+        fs::create_directories(argv[2]);
+        fs::current_path(argv[2]);
+        if (std::string(argv[1]) == "repeat") {
+            require(argc == 4, "Missing thread count");
+            repeat(std::stoi(argv[3]));
+        }
+        else {
+            overlap(executable);
+        }
+    }
+    catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}

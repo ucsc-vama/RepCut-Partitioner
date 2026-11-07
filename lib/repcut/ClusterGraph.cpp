@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <fstream>
+#include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <vector>
 
 using namespace repcut;
@@ -22,7 +25,8 @@ void ClusterGraph::_mark_cones()
 
     const auto numVtxes = dag->numVertices();
     const auto numSinks = dag->sinkNodes.size();
-    assert(numSinks > 0);
+    if (numSinks == 0 && std::any_of(dag->valid.begin(), dag->valid.end(), [](bool valid) { return valid; }))
+        throw std::invalid_argument("Graph contains valid nodes but no sinks");
 
     coneTrie = std::make_unique<ConeTrie>();
     vtxToNode.assign(numVtxes, coneTrie->root());
@@ -206,6 +210,40 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph& dag)
     rcp_log(log_level, REPCUT_LOG_INFO, "Collapse cluster graph: Done in %llums\n", time_ms);
 }
 
+uint32_t ClusterGraph::clusterWeight(size_t cluster_id) const
+{
+    const double weight = nodeWeight[cluster_id];
+    if (!std::isfinite(weight) || weight < 1 || weight > std::numeric_limits<uint32_t>::max())
+        throw std::overflow_error("Cluster weight is outside uint32_t range");
+    return static_cast<uint32_t>(weight);
+}
+
+// Node weight = own weight + proportional share of connected non-self weights.
+// Both backends use the same integer conversion and per-cluster rounding.
+std::vector<uint32_t> ClusterGraph::hypernodeWeights() const
+{
+    const auto numCones = sinkNodes.size();
+    std::vector<uint32_t> nodeWeights;
+    nodeWeights.reserve(numCones);
+    for (uint32_t cone_id = 0; cone_id < numCones; ++cone_id) {
+        nodeWeights.push_back(clusterWeight(cone_id));
+    }
+    // Distribute each shared cluster's weight directly to its cones. Round
+    // each cluster's contribution separately, as in the inverse-mapping sum.
+    for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
+        const auto& pins = clusterIdToPins[cluster_id];
+        const auto cluster_weight = clusterWeight(cluster_id);
+        for (const auto cone_id : pins) {
+            const auto share = cluster_weight / pins.size();
+            if (share > std::numeric_limits<uint32_t>::max() - nodeWeights[cone_id])
+                throw std::overflow_error("Hypergraph node weight exceeds uint32_t range");
+            nodeWeights[cone_id] += share;
+        }
+    }
+
+    return nodeWeights;
+}
+
 // Stream cluster graph to hMetis-format file for MtKaHyPar.
 // Cone clusters (cone_id in [0, numCones)) = hypergraph vertices.
 // Non-cone clusters = hyperedges with 1-indexed pin ids.
@@ -219,21 +257,7 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     const auto numEdges = clusters.size() - numCones;
     const auto numNodes = numCones;
 
-    // Compute node weights (header, edges, then node weights).
-    std::vector<uint32_t> nodeWeights;
-    nodeWeights.reserve(numNodes);
-    for (uint32_t cone_id = 0; cone_id < numCones; ++cone_id) {
-        nodeWeights.push_back(static_cast<uint32_t>(nodeWeight[cone_id]));
-    }
-    // Distribute each shared cluster's weight directly to its cones. Round
-    // each cluster's contribution separately, as in the inverse-mapping sum.
-    for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
-        const auto& pins = clusterIdToPins[cluster_id];
-        const auto cluster_weight = static_cast<uint32_t>(nodeWeight[cluster_id]);
-        for (const auto cone_id : pins) {
-            nodeWeights[cone_id] += cluster_weight / pins.size();
-        }
-    }
+    const auto nodeWeights = hypernodeWeights();
 
     std::ofstream ofs(filename);
 
@@ -243,7 +267,7 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     // edges: one line per non-cone cluster, `weight pin1 pin2 ...` (pins 1-indexed)
     std::string line;
     for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
-        auto edge_weight = static_cast<uint32_t>(nodeWeight[cluster_id]);
+        auto edge_weight = clusterWeight(cluster_id);
 
         line.clear();
         line += std::to_string(edge_weight);

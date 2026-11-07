@@ -24,6 +24,12 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(repcut Threads::Threads)
 
+if(RCP_USE_MTKAHYPAR)
+    target_sources(repcut PRIVATE MtKaHyPar.cpp)
+    target_compile_definitions(repcut PRIVATE RCP_USE_MTKAHYPAR)
+    target_link_libraries(repcut MtKaHyPar::mtkahypar)
+endif()
+
 # Expose the public header on the include path both in-tree and when installed.
 # Only repcut.h is the public ABI; the other headers under include/ are
 # internal to the library.

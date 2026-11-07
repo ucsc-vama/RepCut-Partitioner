@@ -14,7 +14,7 @@ bool parse_commandline_options(int argc, char** argv)
         "threads", po::value<int>(), "parallel threads pass to MtKaHyPar (only --threads 1 is deterministic)")(
         "seed", po::value<int>(), "nonnegative seed passed to MtKaHyPar (-1 = choose randomly, default -1)")(
         "mtkahypar_bin", po::value<std::string>(),
-        "path to the MtKaHyPar binary (default: search $PATH for MtKaHyPar)")(
+        "MtKaHyPar executable override (default: linked library, or PATH in executable-only builds)")(
         "verbose,v", po::value<int>()->implicit_value(1)->zero_tokens(), "increase verbosity (-v = info, -vv = debug)");
 
     po::variables_map vm;

@@ -1,4 +1,4 @@
-// Public C entry point for librepcut (reentrant across distinct work_dirs).
+// Public C entry point for librepcut.
 
 #include "repcut.h"
 
@@ -6,8 +6,11 @@
 #include "Log.h"
 #include "RepCutPartitioner.h"
 
+#include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -16,7 +19,7 @@ namespace fs = std::filesystem;
 
 using namespace repcut;
 
-extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatistics* stats_out)
+static int run(const struct RepCutContext* ctx, struct RepCutStatistics* stats_out)
 {
     if (ctx == nullptr) {
         std::fprintf(stderr, "repcut_run: context is null\n");
@@ -36,6 +39,19 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
     }
     if (ctx->nparts <= 0) {
         rcp_log(ll, REPCUT_LOG_ERROR, "nparts must be > 0 (got %d)\n", ctx->nparts);
+        return 1;
+    }
+
+    if (ctx->parallel_threads <= 0) {
+        rcp_log(ll, REPCUT_LOG_ERROR, "parallel_threads must be > 0\n");
+        return 1;
+    }
+    if (!std::isfinite(ctx->target_ib) || ctx->target_ib < 0) {
+        rcp_log(ll, REPCUT_LOG_ERROR, "target_ib must be finite and nonnegative\n");
+        return 1;
+    }
+    if (ctx->seed < -1) {
+        rcp_log(ll, REPCUT_LOG_ERROR, "seed must be -1 or nonnegative (got %d)\n", ctx->seed);
         return 1;
     }
 
@@ -79,10 +95,11 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
         }
     } guard{lock_path};
 
-    // Early MtKaHyPar check (fail fast before graph traversal).
+    // Early backend check (fail fast before graph traversal).
     auto rcp = std::make_unique<RepCutPartitioner>();
     rcp->log_level = ll;
-    if (!rcp->prepareMtKaHyParBin(ctx->mtkahypar_bin)) {
+    rcp->parallel_threads = ctx->parallel_threads;
+    if (!rcp->prepareMtKaHyPar(ctx->mtkahypar_bin)) {
         return 1;
     }
 
@@ -96,7 +113,6 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
 
     // Run partitioner
     rcp->kahypar_imbalance_factor = ctx->target_ib;
-    rcp->parallel_threads = ctx->parallel_threads;
     rcp->kahypar_seed = ctx->seed;
     rcp->set_work_directory(ctx->work_directory);
     if (!rcp->partition(*dag, ctx->nparts)) {
@@ -124,4 +140,33 @@ extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatisti
 
     rcp_log(ll, REPCUT_LOG_INFO, "Done\n");
     return 0;
+}
+
+extern "C" int repcut_run(const struct RepCutContext* ctx, struct RepCutStatistics* stats_out)
+{
+    // MtKaHyPar owns process-global state (including its RNG and thread pool).
+    // Reject overlap rather than silently serializing independent callers.
+    static std::atomic_flag busy = ATOMIC_FLAG_INIT;
+    if (busy.test_and_set(std::memory_order_acquire)) {
+        std::fprintf(stderr, "repcut_run: another call is already active in this process\n");
+        return 1;
+    }
+    struct BusyGuard
+    {
+        std::atomic_flag& flag;
+        ~BusyGuard() { flag.clear(std::memory_order_release); }
+    } guard{busy};
+
+    // No C++ exception may cross the public C ABI. Local resource and workdir
+    // guards unwind first, so a failed call does not prevent a later retry.
+    try {
+        return run(ctx, stats_out);
+    }
+    catch (const std::exception& error) {
+        std::fprintf(stderr, "repcut_run: %s\n", error.what());
+    }
+    catch (...) {
+        std::fprintf(stderr, "repcut_run: unknown exception\n");
+    }
+    return 1;
 }
