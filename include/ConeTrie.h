@@ -19,8 +19,9 @@ namespace repcut {
 
         NodeId root() const { return 0; }
 
-        // Repeated visits for the current cone share a child. Once a larger
-        // cone id is visited, earlier cone ids must never be visited again.
+        // Add the current cone, or return node unchanged if it already ends
+        // with that cone. Equal paths share a node. Once a larger cone id is
+        // visited, earlier cone ids must never be visited again.
         NodeId visit(NodeId node, uint32_t cone_id);
 
         // Cone ids from root to leaf in increasing order (empty for root).

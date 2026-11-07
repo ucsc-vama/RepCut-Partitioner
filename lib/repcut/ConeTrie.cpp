@@ -41,6 +41,8 @@ namespace repcut {
     {
         Node& parent = node(id);
         assert(cone_id != UINT32_MAX);
+        if (parent.value == cone_id)
+            return id;
         assert(id == root() || parent.value < cone_id);
         if (parent.lastChild != NO_NODE) {
             const auto last_cone = node(parent.lastChild).value;

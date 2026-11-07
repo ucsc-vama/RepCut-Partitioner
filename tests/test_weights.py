@@ -81,6 +81,16 @@ class WeightTest(unittest.TestCase):
             [[0, 1, 2], [0, 1, 3]],
         )
 
+    def test_reconvergent_dependencies(self):
+        # Diamonds and repeated edges reach the same vertex more than once.
+        # Shared ancestors must still appear in every dependent partition.
+        self.check_graph(
+            [(0, [1, 2, 2]), (0, [3]), (0, [3, 4]), (0, [5, 6]),
+             (0, [6, 7, 7]), (0, []), (0, []), (0, [])],
+            "3 3 11\n1 1 2 3\n1 1 2\n1 2 3\n1\n1\n1\n",
+            [[0, 1, 2, 3, 4, 5, 7], [0, 1, 2, 3, 4, 6]],
+        )
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

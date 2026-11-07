@@ -23,7 +23,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
 #include <utility>
 
 #include "process.hpp"
@@ -252,10 +251,9 @@ bool RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
     partitions.clear();
     partitions.assign(desired_parts, std::vector<uint32_t>());
 
-    std::unordered_set<uint32_t> vis;
+    std::vector<bool> visited(dag.numVertices(), false);
     std::vector<uint32_t> fringe;
     std::vector<uint32_t> sinksForPart;
-    vis.reserve(1 << 14);
     fringe.reserve(1 << 14);
 
     for (uint32_t pid = 0; pid < desired_parts; ++pid) {
@@ -268,10 +266,10 @@ bool RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
             }
         }
 
-        vis.clear();
         fringe.clear();
         for (uint32_t s : sinksForPart) {
-            if (vis.insert(s).second) {
+            if (!visited[s]) {
+                visited[s] = true;
                 fringe.push_back(s);
             }
         }
@@ -280,13 +278,14 @@ bool RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
             const uint32_t v = fringe.back();
             fringe.pop_back();
 
-            // Skip invalid nodes (keep in vis to avoid re-traversing edges).
+            // Invalid nodes never contribute to a partition; leave them marked.
             if (!dag.valid[v])
                 continue;
             part.push_back(v);
 
             for (const auto u : dag.inNeigh[v]) {
-                if (vis.insert(u).second) {
+                if (!visited[u]) {
+                    visited[u] = true;
                     fringe.push_back(u);
                 }
             }
@@ -294,6 +293,12 @@ bool RepCutPartitioner::_reconstruct(DirectedAcyclicGraph& dag)
 
         // Sort ascending for diffable output.
         std::sort(part.begin(), part.end());
+
+        // Reset only the valid vertices reached in this partition. Clearing
+        // the entire bitmap per partition would penalize many small partitions.
+        for (const auto v : part) {
+            visited[v] = false;
+        }
     }
 
     auto stop = std::chrono::system_clock::now();

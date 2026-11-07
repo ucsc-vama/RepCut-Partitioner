@@ -7,7 +7,6 @@
 #include <chrono>
 #include <fstream>
 #include <numeric>
-#include <unordered_set>
 #include <vector>
 
 using namespace repcut;
@@ -28,7 +27,6 @@ void ClusterGraph::_mark_cones()
     coneTrie = std::make_unique<ConeTrie>();
     vtxToNode.assign(numVtxes, coneTrie->root());
 
-    std::unordered_set<uint32_t> coneVisited;
     std::vector<uint32_t> fringe;
     std::vector<uint32_t> fringeNext;
 
@@ -39,10 +37,8 @@ void ClusterGraph::_mark_cones()
     for (uint32_t cone_id = 0; cone_id < numSinks; ++cone_id) {
         const uint32_t seed = dag->sinkNodes[cone_id];
 
-        coneVisited.clear();
         fringe.clear();
 
-        coneVisited.insert(seed);
         fringe.push_back(seed);
         vtxToNode[seed] = coneTrie->visit(vtxToNode[seed], cone_id);
 
@@ -52,8 +48,11 @@ void ClusterGraph::_mark_cones()
                 for (const auto nid : dag->inNeigh[vtx]) {
                     if (!dag->valid[nid])
                         continue;
-                    if (coneVisited.insert(nid).second) {
-                        vtxToNode[nid] = coneTrie->visit(vtxToNode[nid], cone_id);
+                    // The trie leaf already records the last cone visited.
+                    // An unchanged leaf means this vertex was queued earlier.
+                    const auto leaf = coneTrie->visit(vtxToNode[nid], cone_id);
+                    if (leaf != vtxToNode[nid]) {
+                        vtxToNode[nid] = leaf;
                         fringeNext.push_back(nid);
                     }
                 }

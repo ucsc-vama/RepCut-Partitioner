@@ -23,12 +23,15 @@ static void testSharedPaths()
 
     const auto a = trie.visit(trie.root(), 0);
     require(trie.visit(trie.root(), 0) == a, "repeated root visit creates a node");
+    require(trie.visit(a, 0) == a, "revisiting current cone changes leaf");
     const auto ab = trie.visit(a, 1);
     const auto b = trie.visit(trie.root(), 1);
     require(trie.visit(a, 1) == ab, "repeated branch visit creates a node");
     const auto ac = trie.visit(a, 2);
     const auto abc = trie.visit(ab, 2);
     require(trie.visit(a, 2) == ac, "interleaved visit loses cached child");
+    require(trie.visit(ac, 2) == ac, "revisiting branch changes leaf");
+    require(trie.visit(abc, 2) == abc, "revisiting deep path changes leaf");
     require(trie.nodeCount() == 5, "unexpected node count");
     require(trie.pathConeIds(a) == std::vector<uint32_t>{0}, "old leaf changed");
     require(trie.pathConeIds(b) == std::vector<uint32_t>{1}, "root branch changed");
@@ -48,6 +51,7 @@ static void testArenaGrowth()
         branches.push_back(trie.visit(prefix, cone));
         require(trie.visit(trie.root(), cone) == roots.back(), "root child lost after growth");
         require(trie.visit(prefix, cone) == branches.back(), "prefix child lost after growth");
+        require(trie.visit(branches.back(), cone) == branches.back(), "revisit fails across storage chunks");
     }
     require(trie.nodeCount() == 140001, "growth created duplicate nodes");
     for (uint32_t cone = 1; cone <= 70000; ++cone) {
@@ -77,6 +81,7 @@ static void testCanonicalSets()
             // Paired vertices must share a leaf throughout the traversal.
             for (size_t i = vertex; i < vertex + 2; ++i) {
                 leaves[i] = trie.visit(leaves[i], cone);
+                require(trie.visit(leaves[i], cone) == leaves[i], "revisiting a cone set changes it");
                 expected[i].push_back(cone);
             }
         }
