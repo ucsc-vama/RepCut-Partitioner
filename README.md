@@ -34,8 +34,9 @@ cmake --build build -j 4
 cmake --install build
 ```
 
+The binary is at `build/tools/rcp/rcp`, or `install/bin/rcp` after installation.
+The install also includes both libraries and the CMake target `repcut::repcut`.
 The first configure downloads MtKaHyPar's pinned source dependencies.
-The install includes `rcp`, both libraries, and the CMake target `repcut::repcut`.
 Add `-DRCP_BUILD_CLI=OFF` to build only the libraries, without Boost.
 
 oneTBB and hwloc must also be available at runtime.
