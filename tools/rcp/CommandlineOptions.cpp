@@ -15,6 +15,8 @@ bool parse_commandline_options(int argc, char** argv)
         "seed", po::value<int>(), "nonnegative seed passed to MtKaHyPar (-1 = choose randomly, default -1)")(
         "mtkahypar_bin", po::value<std::string>(),
         "MtKaHyPar executable override (default: linked library, or PATH in executable-only builds)")(
+        "save-intermediate-files", po::bool_switch(&opts.save_intermediate_files),
+        "save the hypergraph and cone assignments in the work directory")(
         "verbose,v", po::value<int>()->implicit_value(1)->zero_tokens(), "increase verbosity (-v = info, -vv = debug)");
 
     po::variables_map vm;

@@ -21,10 +21,11 @@ namespace repcut {
         void _partitionIndependentCones(const std::vector<uint32_t>& weights);
         bool _callMtKaHyPar();
         bool _parseKaHyParResult();
+        bool _saveConeAssignment() const;
         bool _reconstruct(DirectedAcyclicGraph& dag);
 
         bool use_mtkahypar_library = false;
-        // hmetis file path for the executable backend.
+        // hmetis file path for the executable backend or optional debug dump.
         fs::path hmetis_path;
         // Output filename produced by MtKaHyPar.
         fs::path mtkahypar_output_filename;
@@ -39,6 +40,7 @@ namespace repcut {
         int32_t kahypar_seed = -1;
         uint32_t desired_parts = 0;
         int parallel_threads = -1;
+        bool save_intermediate_files = false;
 
         std::string work_directory;
         void set_work_directory(const std::string& work_dir) { work_directory = work_dir; }

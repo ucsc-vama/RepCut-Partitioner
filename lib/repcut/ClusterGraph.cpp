@@ -260,6 +260,8 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     const auto nodeWeights = hypernodeWeights();
 
     std::ofstream ofs(filename);
+    if (!ofs)
+        throw std::runtime_error(std::string("Cannot open hypergraph file: ") + filename);
 
     // header: numEdges numNodes "11"
     ofs << numEdges << " " << numNodes << " 11\n";
@@ -285,6 +287,8 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     }
 
     ofs.close();
+    if (!ofs)
+        throw std::runtime_error(std::string("Cannot write hypergraph file: ") + filename);
 
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);

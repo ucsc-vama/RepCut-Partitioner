@@ -70,6 +70,8 @@ At runtime, provide `MtKaHyPar` on `$PATH` or specify its path with
 `--mtkahypar_bin arg`  external executable override, using MtKaHyPar's CLI and
                        partition-file format. Defaults to linked MtKaHyPar.
 
+`--save-intermediate-files` save the hypergraph and cone assignments for debugging.
+
 `--log_level arg`      log level: `silent`, `error`, `warn`, `info`, `debug`.
 
 `-v` / `-vv`           shorthand for `--log_level info` / `--log_level debug`.
@@ -134,6 +136,11 @@ are sorted ascending and correspond to the graph file's line number minus one
 
 Partition lines are written in partition-id order (0, 1, ..., nparts-1).
 
+With `--save-intermediate-files`, the work directory also contains `parts.hmetis`
+and `parts.hmetis.part<N>.epsilon<E>.seed<S>.KaHyPar` (one partition id per cone).
+This works with either backend, including independent cones. The external
+backend already retains the files it needs to communicate with MtKaHyPar.
+
 # Deterministic
 
 For deterministic partitioning, use a fixed seed (not `-1`), `--threads 1`, and
@@ -154,6 +161,8 @@ int repcut_run(const struct RepCutContext* ctx,
                struct RepCutStatistics* stats_out);
 ```
 
+Zero-initialize `RepCutContext` before setting its fields.
+
 - Returns 0 on success, non-zero on failure.
 - On success, writes `rcp_output.txt` under `ctx->work_directory`.
 - Repeated sequential calls are supported. Overlapping calls in the same
@@ -172,6 +181,7 @@ int repcut_run(const struct RepCutContext* ctx,
 - `ctx->seed`: a nonnegative fixed seed, or `-1` for a random seed.
   The chosen value is logged at info level.
 - Aggregate statistics are available via the optional `stats_out` parameter.
+- Set `ctx->save_intermediate_files` to `true` to save intermediate files.
 
 # Graph File Format
 
@@ -215,6 +225,7 @@ checks seed selection and replay. Python 3 is required:
 python3 tests/test_edgeless.py --rcp build/tools/rcp/rcp --work-directory build/test-edgeless
 python3 tests/test_seed.py --rcp build/tools/rcp/rcp --work-directory build/test-seed
 python3 tests/test_weights.py --rcp build/tools/rcp/rcp --work-directory build/test-weights
+python3 tests/test_intermediates.py --rcp build/tools/rcp/rcp --work-directory build/test-intermediates
 c++ -std=c++17 -Iinclude tests/test_cone_trie.cpp lib/repcut/ConeTrie.cpp -o build/test-cone-trie
 build/test-cone-trie
 c++ -std=c++17 -Iinclude tests/test_dag.cpp lib/repcut/DAG.cpp -o build/test-dag

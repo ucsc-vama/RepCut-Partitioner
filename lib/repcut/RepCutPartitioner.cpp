@@ -103,15 +103,19 @@ bool RepCutPartitioner::_partitionCones(DirectedAcyclicGraph& dag)
     clusters->log_level = log_level;
     clusters->collapseFromDAG(dag);
 
-    if (!use_mtkahypar_library) {
+    if (!use_mtkahypar_library || save_intermediate_files) {
         hmetis_path = fs::path(work_directory) / "parts.hmetis";
+        std::ostringstream oss;
+        oss << hmetis_path.filename().string() << ".part" << desired_parts << ".epsilon" << kahypar_imbalance_factor
+            << ".seed" << mtkahypar_seed << ".KaHyPar";
+        mtkahypar_output_filename = oss.str();
         clusters->writeHMetisFile(hmetis_path.c_str());
     }
     if (clusters->clusters.size() == clusters->sinkNodes.size()) {
         const auto weights = clusters->hypernodeWeights();
         clusters.reset();
         _partitionIndependentCones(weights);
-        return true;
+        return !save_intermediate_files || _saveConeAssignment();
     }
 
 #ifdef RCP_USE_MTKAHYPAR
@@ -125,15 +129,27 @@ bool RepCutPartitioner::_partitionCones(DirectedAcyclicGraph& dag)
         partIdToConeId.assign(desired_parts, {});
         for (uint32_t cone = 0; cone < coneIdToPartId.size(); ++cone)
             partIdToConeId[coneIdToPartId[cone]].push_back(cone);
-        return true;
+        return !save_intermediate_files || _saveConeAssignment();
     }
 #endif
     clusters.reset();
-    std::ostringstream oss;
-    oss << hmetis_path.filename().string() << ".part" << desired_parts << ".epsilon" << kahypar_imbalance_factor
-        << ".seed" << mtkahypar_seed << ".KaHyPar";
-    mtkahypar_output_filename = oss.str();
     return _callMtKaHyPar() && _parseKaHyParResult();
+}
+
+bool RepCutPartitioner::_saveConeAssignment() const
+{
+    const auto path = fs::path(work_directory) / mtkahypar_output_filename;
+    std::ofstream output(path);
+    if (output) {
+        for (const auto part : coneIdToPartId)
+            output << part << '\n';
+        output.close();
+    }
+    if (!output) {
+        rcp_log(log_level, REPCUT_LOG_ERROR, "Cannot write cone assignments to %s\n", path.c_str());
+        return false;
+    }
+    return true;
 }
 
 // An edgeless cone-overlap hypergraph has no replication cost to minimize.

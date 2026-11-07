@@ -80,7 +80,7 @@ static void checkClosure(const std::string& output, unsigned n, int k)
 
 static void repeat(int threads)
 {
-    RepCutContext ctx{"input.graph", ".", 2, 0.1f, threads, 42, REPCUT_LOG_SILENT, nullptr};
+    RepCutContext ctx{"input.graph", ".", 2, 0.1f, threads, 42, REPCUT_LOG_SILENT, nullptr, false};
     for (unsigned run = 0; run < 100; ++run) {
         // Include graphs large enough to exercise MtKaHyPar's coarsening.
         const unsigned n = 128U << (run % 4);
@@ -95,6 +95,20 @@ static void repeat(int threads)
         checkClosure(output, n, ctx.nparts);
     }
     require(!fs::exists("parts.hmetis"), "Linked backend wrote an intermediate hypergraph");
+
+    writeGraph(32);
+    fs::create_directory("saved");
+    auto saved = ctx;
+    saved.work_directory = "saved";
+    saved.seed = 42;
+    saved.save_intermediate_files = true;
+    require(repcut_run(&saved, nullptr) == 0, "Saving intermediate files failed");
+    require(fs::is_regular_file("saved/parts.hmetis"), "Missing saved hypergraph");
+    require(fs::is_regular_file("saved/parts.hmetis.part4.epsilon0.1.seed42.KaHyPar"),
+            "Missing saved cone assignments");
+    checkClosure(read("saved/rcp_output.txt"), 32, saved.nparts);
+    require(repcut_run(&ctx, nullptr) == 0, "Call with saving disabled failed");
+    require(!fs::exists("parts.hmetis"), "Call with saving disabled saved a hypergraph");
 
     // Initialization is process-wide; a rejected thread change must leave the
     // original pool and both busy/workdir guards usable for the next call.
@@ -145,7 +159,7 @@ static void overlap(const std::string& executable)
     fs::remove("version-ready");
     fs::remove("version-release");
     std::ofstream("hold-version");
-    RepCutContext ctx{"input.graph", ".", 2, 0.1f, 1, 42, REPCUT_LOG_SILENT, executable.c_str()};
+    RepCutContext ctx{"input.graph", ".", 2, 0.1f, 1, 42, REPCUT_LOG_SILENT, executable.c_str(), false};
     int first = 0;
     std::thread caller([&]() { first = repcut_run(&ctx, nullptr); });
     const bool started = waitFor("version-ready");
@@ -154,6 +168,7 @@ static void overlap(const std::string& executable)
     fs::create_directory("other");
     auto other = ctx;
     other.work_directory = "other";
+    other.save_intermediate_files = true;
     const int second = started ? repcut_run(&other, nullptr) : 0;
     std::ofstream("version-release");
     caller.join();

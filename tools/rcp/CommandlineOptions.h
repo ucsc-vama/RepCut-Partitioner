@@ -21,9 +21,10 @@ public:
     float target_ib = 0.03f;
     int parallel_threads = 1;
     int seed = -1;
+    bool save_intermediate_files = false;
     // Verbosity (-v=info, -vv=debug).
     int verbosity = 0;
-    // Optional MtKaHyPar binary path (empty = search $PATH).
+    // Optional MtKaHyPar executable override (empty = build's default backend).
     std::string mtkahypar_bin;
 
     bool check();

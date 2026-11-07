@@ -99,6 +99,7 @@ static int run(const struct RepCutContext* ctx, struct RepCutStatistics* stats_o
     auto rcp = std::make_unique<RepCutPartitioner>();
     rcp->log_level = ll;
     rcp->parallel_threads = ctx->parallel_threads;
+    rcp->save_intermediate_files = ctx->save_intermediate_files;
     if (!rcp->prepareMtKaHyPar(ctx->mtkahypar_bin)) {
         return 1;
     }

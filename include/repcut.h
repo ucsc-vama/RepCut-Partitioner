@@ -4,6 +4,7 @@
 #ifndef REPCUT_H
 #define REPCUT_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -18,6 +19,7 @@ enum RepCutLogLevel {
     REPCUT_LOG_DEBUG = 4, // -vv
 };
 
+// Zero-initialize before setting fields.
 struct RepCutContext
 {
     const char* graph_filename;    // required: path to Metis-like graph file
@@ -33,6 +35,9 @@ struct RepCutContext
     // for "MtKaHyPar" in executable-only builds.
     // An explicit executable is checked with --version before graph traversal.
     const char* mtkahypar_bin;
+
+    // Default false. Save parts.hmetis and cone assignments in work_directory.
+    bool save_intermediate_files;
 };
 
 // Aggregated partitioning statistics.  Optional out-parameter of repcut_run;

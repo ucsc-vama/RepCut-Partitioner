@@ -11,7 +11,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    struct RepCutContext ctx;
+    struct RepCutContext ctx = {};
     ctx.graph_filename = opts.graph_filename.c_str();
     ctx.work_directory = opts.work_directory.c_str();
     ctx.nparts = opts.nparts;
@@ -21,6 +21,7 @@ int main(int argc, char** argv)
     ctx.log_level = resolve_log_level();
     // Empty string selects the build's default backend.
     ctx.mtkahypar_bin = opts.mtkahypar_bin.empty() ? nullptr : opts.mtkahypar_bin.c_str();
+    ctx.save_intermediate_files = opts.save_intermediate_files;
 
     struct RepCutStatistics stat
     {
