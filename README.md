@@ -200,6 +200,8 @@ python3 tests/test_seed.py --rcp build/tools/rcp/rcp --work-directory build/test
 python3 tests/test_weights.py --rcp build/tools/rcp/rcp --work-directory build/test-weights
 c++ -std=c++17 -Iinclude tests/test_cone_trie.cpp lib/repcut/ConeTrie.cpp -o build/test-cone-trie
 build/test-cone-trie
+c++ -std=c++17 -Iinclude tests/test_dag.cpp lib/repcut/DAG.cpp -o build/test-dag
+build/test-dag build/test-dag-data
 ```
 
 Generated graphs, memberships and logs remain in the selected work directory.
