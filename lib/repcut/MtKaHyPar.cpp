@@ -103,7 +103,7 @@ bool MtKaHyPar::create(const ClusterGraph& clusters)
     if (error.status != SUCCESS)
         return failed("configuration");
 
-    const auto weights = clusters.hypernodeWeights();
+    const auto& weights = clusters.hypernodeWeights();
     std::vector<mt_kahypar_hypernode_weight_t> node_weights;
     node_weights.reserve(weights.size());
     uint64_t total_weight = 0;
@@ -126,8 +126,8 @@ bool MtKaHyPar::create(const ClusterGraph& clusters)
     std::vector<mt_kahypar_hypernode_id_t> pins;
     std::vector<mt_kahypar_hyperedge_weight_t> edge_weights;
     size_t num_pins = 0;
-    for (size_t cid = weights.size(); cid < clusters.clusterIdToPins.size(); ++cid) {
-        const auto size = clusters.clusterIdToPins[cid].size();
+    for (const auto& edge : clusters.hyperedges) {
+        const auto size = edge.pins.size();
         // The executable's file reader drops singleton hyperedges. They do
         // contribute to node weights above, but cannot affect the km1 cut.
         if (size > 1) {
@@ -137,17 +137,16 @@ bool MtKaHyPar::create(const ClusterGraph& clusters)
         }
     }
     pins.reserve(num_pins);
-    for (size_t cid = weights.size(); cid < clusters.clusterIdToPins.size(); ++cid) {
-        const auto& edge = clusters.clusterIdToPins[cid];
-        if (edge.size() <= 1)
+    for (const auto& edge : clusters.hyperedges) {
+        if (edge.pins.size() <= 1)
             continue;
-        const auto weight = clusters.clusterWeight(cid);
+        const auto weight = edge.weight;
         if (weight > std::numeric_limits<mt_kahypar_hyperedge_weight_t>::max()) {
             rcp_log(log_level, REPCUT_LOG_ERROR, "Hyperedge weight exceeds MtKaHyPar's signed integer range\n");
             return false;
         }
         edge_weights.push_back(static_cast<mt_kahypar_hyperedge_weight_t>(weight));
-        pins.insert(pins.end(), edge.begin(), edge.end());
+        pins.insert(pins.end(), edge.pins.begin(), edge.pins.end());
         offsets.push_back(pins.size());
     }
 

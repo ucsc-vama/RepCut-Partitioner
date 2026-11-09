@@ -10,6 +10,7 @@
 #include <limits>
 #include <numeric>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 using namespace repcut;
@@ -141,21 +142,6 @@ void ClusterGraph::_collect_clusters()
         floodFill(v, cluster_id);
     }
 
-    // Derive clusterIdToPins[cid] directly from the trie path of any vertex
-    // in the cluster (they are all equal by construction, sorted & unique).
-    clusterIdToPins.clear();
-    clusterIdToPins.reserve(clusters.size());
-    for (auto& cluster : clusters) {
-        assert(!cluster.empty());
-        auto leaf = vtxToNode[cluster.front()];
-        clusterIdToPins.push_back(coneTrie->pathConeIds(leaf));
-    }
-
-    // Trie + per-vertex trie ids are no longer needed downstream.
-    vtxToNode.clear();
-    vtxToNode.shrink_to_fit();
-    coneTrie.reset();
-
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     rcp_log(log_level, REPCUT_LOG_DEBUG, "Collect clusters: Done in %llums (%zu clusters)\n", duration.count(),
@@ -204,6 +190,9 @@ void ClusterGraph::collapseFromDAG(const DirectedAcyclicGraph& dag)
     // 4. compute cluster weight
     this->_update_cluster_weight();
 
+    // 5. merge identical hyperedges, preserving per-cluster node-weight rounding
+    this->_build_hypergraph();
+
     auto stop = std::chrono::system_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
     uint64_t time_ms = duration.count();
@@ -218,21 +207,37 @@ uint32_t ClusterGraph::clusterWeight(size_t cluster_id) const
     return static_cast<uint32_t>(weight);
 }
 
-// Node weight = own weight + proportional share of connected non-self weights.
-// Both backends use the same integer conversion and per-cluster rounding.
-std::vector<uint32_t> ClusterGraph::hypernodeWeights() const
+// Equal trie leaves identify equal pin sets exactly. Allocate each pin vector
+// once, but keep each cluster's integer conversion and node-weight contribution
+// separate: sum(floor(weight / pins)) need not equal floor(sum(weight) / pins).
+void ClusterGraph::_build_hypergraph()
 {
     const auto numCones = sinkNodes.size();
-    std::vector<uint32_t> nodeWeights;
+    nodeWeights.clear();
     nodeWeights.reserve(numCones);
     for (uint32_t cone_id = 0; cone_id < numCones; ++cone_id) {
         nodeWeights.push_back(clusterWeight(cone_id));
     }
-    // Distribute each shared cluster's weight directly to its cones. Round
-    // each cluster's contribution separately, as in the inverse-mapping sum.
+    hyperedges.clear();
+    std::unordered_map<ConeTrie::NodeId, size_t> leafToEdge;
+    leafToEdge.reserve(clusters.size() - numCones);
+    size_t originalPins = 0, uniquePins = 0;
     for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
-        const auto& pins = clusterIdToPins[cluster_id];
+        const auto leaf = vtxToNode[clusters[cluster_id].front()];
+        const auto [entry, inserted] = leafToEdge.emplace(leaf, hyperedges.size());
+        if (inserted) {
+            hyperedges.push_back({coneTrie->pathConeIds(leaf), 0});
+            uniquePins += hyperedges.back().pins.size();
+        }
+        auto& edge = hyperedges[entry->second];
+        const auto& pins = edge.pins;
+        originalPins += pins.size();
         const auto cluster_weight = clusterWeight(cluster_id);
+        // MtKaHyPar uses signed 32-bit edge weights in both its C API and
+        // file reader. Reject an unrepresentable sum instead of wrapping it.
+        if (cluster_weight > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) - edge.weight)
+            throw std::overflow_error("Hyperedge weight exceeds MtKaHyPar's signed integer range");
+        edge.weight += cluster_weight;
         for (const auto cone_id : pins) {
             const auto share = cluster_weight / pins.size();
             if (share > std::numeric_limits<uint32_t>::max() - nodeWeights[cone_id])
@@ -241,12 +246,18 @@ std::vector<uint32_t> ClusterGraph::hypernodeWeights() const
         }
     }
 
-    return nodeWeights;
+    rcp_log(log_level, REPCUT_LOG_INFO, "Merged %zu duplicate hyperedges (%zu -> %zu pins)\n",
+            clusters.size() - numCones - hyperedges.size(), originalPins, uniquePins);
+
+    // Trie + per-vertex trie ids are no longer needed downstream.
+    vtxToNode.clear();
+    vtxToNode.shrink_to_fit();
+    coneTrie.reset();
 }
 
 // Stream cluster graph to hMetis-format file for MtKaHyPar.
 // Cone clusters (cone_id in [0, numCones)) = hypergraph vertices.
-// Non-cone clusters = hyperedges with 1-indexed pin ids.
+// Non-cone clusters with identical pin sets share a weighted hyperedge.
 // Node weight = own weight + proportional share of connected non-self weights.
 void ClusterGraph::writeHMetisFile(const char* filename)
 {
@@ -254,10 +265,8 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     auto start = std::chrono::system_clock::now();
 
     const auto numCones = dag->sinkNodes.size();
-    const auto numEdges = clusters.size() - numCones;
+    const auto numEdges = hyperedges.size();
     const auto numNodes = numCones;
-
-    const auto nodeWeights = hypernodeWeights();
 
     std::ofstream ofs(filename);
     if (!ofs)
@@ -266,14 +275,12 @@ void ClusterGraph::writeHMetisFile(const char* filename)
     // header: numEdges numNodes "11"
     ofs << numEdges << " " << numNodes << " 11\n";
 
-    // edges: one line per non-cone cluster, `weight pin1 pin2 ...` (pins 1-indexed)
+    // edges: one line per unique pin set, `weight pin1 pin2 ...` (pins 1-indexed)
     std::string line;
-    for (uint32_t cluster_id = numCones; cluster_id < clusters.size(); ++cluster_id) {
-        auto edge_weight = clusterWeight(cluster_id);
-
+    for (const auto& edge : hyperedges) {
         line.clear();
-        line += std::to_string(edge_weight);
-        for (auto& pin : clusterIdToPins[cluster_id]) {
+        line += std::to_string(edge.weight);
+        for (const auto pin : edge.pins) {
             line += ' ';
             line += std::to_string(pin + 1);
         }

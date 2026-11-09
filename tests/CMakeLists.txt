@@ -2,6 +2,10 @@ add_executable(test-library test_library.cpp)
 target_link_libraries(test-library PRIVATE repcut)
 add_test(NAME library-overlap
     COMMAND test-library overlap "${CMAKE_CURRENT_BINARY_DIR}/overlap")
+add_executable(test-hypergraph test_hypergraph.cpp)
+target_link_libraries(test-hypergraph PRIVATE repcut)
+add_test(NAME hypergraph-merge
+    COMMAND test-hypergraph "${CMAKE_CURRENT_BINARY_DIR}/hypergraph")
 if(RCP_USE_MTKAHYPAR)
     # Inspect the actual parsed context against the pinned upstream definition.
     # Production code uses only MtKaHyPar's public C API.

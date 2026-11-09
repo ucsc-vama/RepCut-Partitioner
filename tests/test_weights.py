@@ -78,9 +78,47 @@ class WeightTest(unittest.TestCase):
         # cone. Summing weights before division would incorrectly contribute 1.
         self.check_graph(
             [(0, [2, 3]), (0, [2, 3]), (0, []), (0, [])],
-            "2 2 11\n1 1 2\n1 1 2\n1\n1\n",
+            "1 2 11\n2 1 2\n1\n1\n",
             [[0, 1, 2], [0, 1, 3]],
         )
+
+    def test_round_before_summing_duplicate_edge_weights(self):
+        # floor(1.75) + floor(1.75) = 2, not floor(1.75 + 1.75) = 3.
+        self.check_graph(
+            [(0.75, [2, 3]), (0.75, [2, 3]), (0, []), (0, [])],
+            "1 2 11\n2 1 2\n1\n1\n",
+            [[0, 1, 2], [0, 1, 3]],
+        )
+
+    def test_merged_weight_keeps_integer_precision(self):
+        # The merged sum is not exactly representable in a float.
+        self.check_graph(
+            [(16777215, [2, 3]), (0, [2, 3]), (0, []), (0, [])],
+            "1 2 11\n16777217 1 2\n8388609\n8388609\n",
+            [[0, 1, 2], [0, 1, 3]],
+        )
+
+    def test_nonadjacent_duplicates_and_distinct_pin_sets(self):
+        self.check_graph(
+            [(0.75, [5, 6]), (1.25, [6, 7]), (1.75, [5, 6]),
+             (0, [5, 6, 7]), (1.25, [5, 6]), (0, []), (0, []), (0, []), (-1, [])],
+            "3 3 11\n5 1 2\n2 2 3\n1 1 2 3\n3\n4\n2\n",
+            [[0, 1, 2, 3, 4, 5, 7], [0, 1, 2, 3, 4, 6]],
+        )
+
+    def test_merged_edge_weight_overflow(self):
+        graph = self.work / "input.graph"
+        graph.write_text("4 4\nn 1073741824 2 3\nn 1073741824 2 3\nn 0\nn 0\n")
+        result = subprocess.run(
+            [str(RCP), "--graph_file", str(graph), "--work_directory", str(self.work),
+             "--nparts", "2", "--threads", "1", "--seed", "42",
+             "--mtkahypar_bin", str(self.mt)],
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Hyperedge weight exceeds MtKaHyPar's signed integer range", result.stderr)
+        self.assertFalse((self.work / "rcp_output.txt").exists())
+        self.assertFalse((self.work / ".lock").exists())
 
     def test_reconvergent_dependencies(self):
         # Diamonds and repeated edges reach the same vertex more than once.

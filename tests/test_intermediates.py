@@ -116,6 +116,14 @@ class IntermediateTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.check_dumps(work)
 
+    def test_merged_hypergraph(self):
+        self.nodes = [(0, [2, 3]), (0, [2, 3]), (0, []), (0, [])]
+        self.hypergraph = "1 2 11\n2 1 2\n1\n1\n"
+        for external in ([True] if EXTERNAL_ONLY else [False, True]):
+            work, result = self.run_case(f"merged-{external}", True, external)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.check_dumps(work)
+
     def test_random_seed_filename(self):
         work, result = self.run_case("random", True, external=EXTERNAL_ONLY, seed=-1)
         self.assertEqual(result.returncode, 0, result.stderr)

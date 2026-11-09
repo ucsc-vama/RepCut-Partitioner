@@ -111,7 +111,7 @@ bool RepCutPartitioner::_partitionCones(DirectedAcyclicGraph& dag)
         mtkahypar_output_filename = oss.str();
         clusters->writeHMetisFile(hmetis_path.c_str());
     }
-    if (clusters->clusters.size() == clusters->sinkNodes.size()) {
+    if (clusters->hyperedges.empty()) {
         const auto weights = clusters->hypernodeWeights();
         clusters.reset();
         _partitionIndependentCones(weights);
