@@ -95,6 +95,7 @@ static void repeat(int threads)
         checkClosure(output, n, ctx.nparts);
     }
     require(!fs::exists("parts.hmetis"), "Linked backend wrote an intermediate hypergraph");
+    require(!fs::exists("mtkahypar.ini"), "Linked backend leaked its temporary configuration");
 
     writeGraph(32);
     fs::create_directory("saved");

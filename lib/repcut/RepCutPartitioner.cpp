@@ -120,7 +120,7 @@ bool RepCutPartitioner::_partitionCones(DirectedAcyclicGraph& dag)
 
 #ifdef RCP_USE_MTKAHYPAR
     if (use_mtkahypar_library) {
-        MtKaHyPar backend(desired_parts, kahypar_imbalance_factor, mtkahypar_seed, log_level);
+        MtKaHyPar backend(desired_parts, kahypar_imbalance_factor, mtkahypar_seed, log_level, work_directory.c_str());
         if (!backend.create(*clusters))
             return false;
         clusters.reset();
@@ -204,6 +204,7 @@ bool RepCutPartitioner::_callMtKaHyPar()
     args.push_back(std::to_string(this->kahypar_imbalance_factor));
     args.push_back("--preset-type");
     args.push_back("default");
+    args.push_back("--p-louvain-low-memory-contraction=true");
     args.push_back("--seed");
     args.push_back(std::to_string(this->mtkahypar_seed));
     args.push_back("--mode");

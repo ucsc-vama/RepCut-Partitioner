@@ -10,6 +10,10 @@
 #include <vector>
 
 namespace repcut {
+    // Load the embedded default preset with low-memory Louvain contraction.
+    // The caller owns the returned context; the temporary file is removed.
+    mt_kahypar_context_t* makeMtKaHyParContext(const char* work_directory);
+
     // Per-call resources. The thread pool and RNG belong to MtKaHyPar's process
     // globals; repcut_run serializes access by rejecting overlapping calls.
     class MtKaHyPar
@@ -27,7 +31,7 @@ namespace repcut {
     public:
         static bool initialize(int threads, RepCutLogLevel log_level);
 
-        MtKaHyPar(int parts, float imbalance, int32_t seed, RepCutLogLevel log_level);
+        MtKaHyPar(int parts, float imbalance, int32_t seed, RepCutLogLevel log_level, const char* work_directory);
         ~MtKaHyPar();
         MtKaHyPar(const MtKaHyPar&) = delete;
         MtKaHyPar& operator=(const MtKaHyPar&) = delete;

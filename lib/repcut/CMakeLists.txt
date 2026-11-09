@@ -25,6 +25,15 @@ find_package(Threads REQUIRED)
 target_link_libraries(repcut Threads::Threads)
 
 if(RCP_USE_MTKAHYPAR)
+    # Embed the pinned default preset so installed/static consumers do not need
+    # to locate a configuration file in the source tree or install prefix.
+    set(mt_preset "${PROJECT_SOURCE_DIR}/external/mt-kahypar/config/default_preset.ini")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${mt_preset}")
+    file(READ "${mt_preset}" RCP_MTKAHYPAR_PRESET)
+    string(APPEND RCP_MTKAHYPAR_PRESET "\np-louvain-low-memory-contraction=true\n")
+    configure_file("${PROJECT_SOURCE_DIR}/cmake/MtKaHyParPreset.h.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/MtKaHyParPreset.h" @ONLY)
+    target_include_directories(repcut PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
     target_sources(repcut PRIVATE MtKaHyPar.cpp)
     target_compile_definitions(repcut PRIVATE RCP_USE_MTKAHYPAR)
     target_link_libraries(repcut MtKaHyPar::mtkahypar)

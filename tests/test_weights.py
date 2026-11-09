@@ -19,6 +19,7 @@ class WeightTest(unittest.TestCase):
             "from pathlib import Path\n"
             "if sys.argv[1:] == ['--version']:\n"
             "    raise SystemExit(0)\n"
+            "assert '--p-louvain-low-memory-contraction=true' in sys.argv\n"
             "def option(name):\n"
             "    return sys.argv[sys.argv.index(name) + 1]\n"
             "graph = Path(option('-h'))\n"

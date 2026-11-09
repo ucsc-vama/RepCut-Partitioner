@@ -139,6 +139,22 @@ class IntermediateTest(unittest.TestCase):
         self.assertIn("Cannot write cone assignments", result.stderr)
         self.assertFalse((work / "rcp_output.txt").exists())
 
+    def test_linked_configuration_write_failure(self):
+        if EXTERNAL_ONLY:
+            self.skipTest("Linked backend disabled")
+        work = self.work / "blocked"
+        config = work / "mtkahypar.ini"
+        config.mkdir(parents=True)
+        _, result = self.run_case("blocked", False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cannot create MtKaHyPar configuration file", result.stderr)
+        self.assertTrue(config.is_dir())
+        self.assertFalse((work / "rcp_output.txt").exists())
+        config.rmdir()
+        _, result = self.run_case("blocked", False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(config.exists())
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

@@ -1,13 +1,52 @@
 #include "MtKaHyPar.h"
 
 #include "Log.h"
+#include "MtKaHyParPreset.h"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <string>
 
 using namespace repcut;
+
+mt_kahypar_context_t* repcut::makeMtKaHyParContext(const char* work_directory)
+{
+    // MtKaHyPar's public parameter setter does not expose Louvain options.
+    // Its file loader accepts the full preset, so materialize the embedded
+    // configuration under the caller's already-locked working directory.
+    struct ConfigFile
+    {
+        std::filesystem::path path;
+        bool created = false;
+        ~ConfigFile()
+        {
+            if (created) {
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+            }
+        }
+    } file{std::filesystem::path(work_directory) / "mtkahypar.ini"};
+    std::ofstream output(file.path);
+    if (!output)
+        throw std::runtime_error("Cannot create MtKaHyPar configuration file: " + file.path.string());
+    file.created = true;
+    output << mtkahypar_preset;
+    output.close();
+    if (!output)
+        throw std::runtime_error("Cannot write MtKaHyPar configuration file: " + file.path.string());
+
+    mt_kahypar_error_t error{};
+    const std::unique_ptr<mt_kahypar_error_t, decltype(&mt_kahypar_free_error_content)> error_guard(
+        &error, mt_kahypar_free_error_content);
+    auto* context = mt_kahypar_context_from_file(file.path.string().c_str(), &error);
+    if (!context)
+        throw std::runtime_error(std::string("Cannot load MtKaHyPar configuration: ") +
+                                 (error.msg ? error.msg : "no error description"));
+    return context;
+}
 
 bool MtKaHyPar::initialize(int threads, RepCutLogLevel log_level)
 {
@@ -28,8 +67,8 @@ bool MtKaHyPar::initialize(int threads, RepCutLogLevel log_level)
     return true;
 }
 
-MtKaHyPar::MtKaHyPar(int parts, float imbalance, int32_t seed, RepCutLogLevel log_level)
-    : context(mt_kahypar_context_from_preset(DEFAULT), mt_kahypar_free_context), log_level(log_level), num_parts(parts)
+MtKaHyPar::MtKaHyPar(int parts, float imbalance, int32_t seed, RepCutLogLevel log_level, const char* work_directory)
+    : context(makeMtKaHyParContext(work_directory), mt_kahypar_free_context), log_level(log_level), num_parts(parts)
 {
     if (!context)
         throw std::runtime_error("Cannot create MtKaHyPar context");
